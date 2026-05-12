@@ -110,7 +110,7 @@ func TestWebhookEndpoints_RotateSecret(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, `{"endpoint":` + endpointJSON + `,"signingSecret":"whsec_new"}`)
+	s.queue(200, `{"endpoint":`+endpointJSON+`,"signingSecret":"whsec_new"}`)
 	out, err := c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1", RotateWebhookSecretRequest{GraceSeconds: 3600})
 	if err != nil {
 		t.Fatal(err)

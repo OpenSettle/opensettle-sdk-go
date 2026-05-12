@@ -77,7 +77,7 @@ func TestHTTP_RetryThenSuccessAfterMultipleFailures(t *testing.T) {
 	s.queue(500, "")
 	s.queue(503, "")
 	s.queue(502, "")
-	s.queue(200, `{"id":"cu_1"}`)
+	s.queue(200, `{"customer":{"id":"cu_1"}}`)
 	_, err := c.Customers.Retrieve(bgCtx(), "cu_1")
 	if err != nil {
 		t.Fatalf("got %v", err)
@@ -118,7 +118,7 @@ func TestHTTP_RetryAfterRespectedOverBackoff(t *testing.T) {
 		Body:    `{"error":{"code":"rate_limited","message":"slow"}}`,
 		Headers: map[string]string{"Retry-After": "3"},
 	})
-	s.queue(200, `{"id":"cu_1"}`)
+	s.queue(200, `{"customer":{"id":"cu_1"}}`)
 	_, err := c.Customers.Retrieve(bgCtx(), "cu_1")
 	if err != nil {
 		t.Fatalf("got %v", err)
@@ -140,7 +140,7 @@ func TestHTTP_BackoffApplied(t *testing.T) {
 	c.http.sleep = func(d time.Duration) { slept = append(slept, d) }
 	s.queue(500, "")
 	s.queue(500, "")
-	s.queue(200, `{"id":"cu_1"}`)
+	s.queue(200, `{"customer":{"id":"cu_1"}}`)
 	_, err := c.Customers.Retrieve(bgCtx(), "cu_1")
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestHTTP_BearerTokenExactlyOnce(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, `{"id":"cu_1"}`)
+	s.queue(200, `{"customer":{"id":"cu_1"}}`)
 	_, _ = c.Customers.Retrieve(bgCtx(), "cu_1")
 	got := s.lastRequest(t).Headers.Values("Authorization")
 	if len(got) != 1 {
@@ -188,7 +188,7 @@ func TestHTTP_UserAgentVersionEmbedded(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, `{"id":"cu_1"}`)
+	s.queue(200, `{"customer":{"id":"cu_1"}}`)
 	_, _ = c.Customers.Retrieve(bgCtx(), "cu_1")
 	got := s.lastRequest(t).Headers.Get("User-Agent")
 	if !strings.Contains(got, Version) {
@@ -208,7 +208,7 @@ func TestHTTP_CustomUserAgentEmbedded(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.http.sleep = func(time.Duration) {}
-	s.queue(200, `{"id":"cu_1"}`)
+	s.queue(200, `{"customer":{"id":"cu_1"}}`)
 	_, _ = c.Customers.Retrieve(bgCtx(), "cu_1")
 	got := s.lastRequest(t).Headers.Get("User-Agent")
 	if !strings.Contains(got, "dropzona/1.2.3") || !strings.HasPrefix(got, "opensettle-go/") {
@@ -224,7 +224,7 @@ func TestHTTP_RetriesShareSameIdempotencyKey(t *testing.T) {
 	c := newTestClient(t, s)
 	c = withRetries(c, 1)
 	s.queue(500, "")
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	_, err := c.Customers.Create(bgCtx(), CreateCustomerRequest{Email: "a@b"})
 	if err != nil {
 		t.Fatal(err)
@@ -245,7 +245,7 @@ func TestHTTP_RetriesSendSameBody(t *testing.T) {
 	c := newTestClient(t, s)
 	c = withRetries(c, 1)
 	s.queue(503, "")
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	_, err := c.Customers.Create(bgCtx(), CreateCustomerRequest{Email: "x@y"})
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +265,7 @@ func TestClient_SafeForConcurrentUse(t *testing.T) {
 	defer s.Close()
 	c := newTestClient(t, s)
 	for i := 0; i < 50; i++ {
-		s.queue(200, customerJSON)
+		s.queue(200, customerWrappedJSON)
 	}
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -314,10 +314,10 @@ func TestPaths_Checkouts(t *testing.T) {
 		path string
 	}{
 		{func() {
-			s.queue(200, checkoutJSON)
+			s.queue(200, checkoutWrappedJSON)
 			_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{Mode: CheckoutPayment})
 		}, "/v1/workspaces/ws_test/checkouts"},
-		{func() { s.queue(200, checkoutJSON); _, _ = c.Checkouts.Retrieve(bgCtx(), "co_1") }, "/v1/workspaces/ws_test/checkouts/co_1"},
+		{func() { s.queue(200, checkoutWrappedJSON); _, _ = c.Checkouts.Retrieve(bgCtx(), "co_1") }, "/v1/workspaces/ws_test/checkouts/co_1"},
 	}
 	for _, tc := range cases {
 		tc.op()
@@ -346,14 +346,14 @@ func TestPaths_Subscriptions(t *testing.T) {
 		op   func()
 		path string
 	}{
-		{func() { s.queue(200, subscriptionJSON); _, _ = c.Subscriptions.Pause(bgCtx(), "sub_1") }, "/v1/workspaces/ws_test/subscriptions/sub_1/pause"},
-		{func() { s.queue(200, subscriptionJSON); _, _ = c.Subscriptions.Resume(bgCtx(), "sub_1") }, "/v1/workspaces/ws_test/subscriptions/sub_1/resume"},
+		{func() { s.queue(200, subscriptionWrappedJSON); _, _ = c.Subscriptions.Pause(bgCtx(), "sub_1") }, "/v1/workspaces/ws_test/subscriptions/sub_1/pause"},
+		{func() { s.queue(200, subscriptionWrappedJSON); _, _ = c.Subscriptions.Resume(bgCtx(), "sub_1") }, "/v1/workspaces/ws_test/subscriptions/sub_1/resume"},
 		{func() {
-			s.queue(200, subscriptionJSON)
+			s.queue(200, subscriptionWrappedJSON)
 			_, _ = c.Subscriptions.Cancel(bgCtx(), "sub_1", CancelSubscriptionRequest{})
 		}, "/v1/workspaces/ws_test/subscriptions/sub_1/cancel"},
 		{func() {
-			s.queue(200, subscriptionJSON)
+			s.queue(200, subscriptionWrappedJSON)
 			_, _ = c.Subscriptions.ChangePlan(bgCtx(), "sub_1", ChangePlanRequest{PriceID: "price_2"})
 		}, "/v1/workspaces/ws_test/subscriptions/sub_1/change_plan"},
 	}
@@ -373,9 +373,9 @@ func TestPaths_Invoices(t *testing.T) {
 		op   func()
 		path string
 	}{
-		{func() { s.queue(200, invoiceJSON); _, _ = c.Invoices.Send(bgCtx(), "in_1") }, "/v1/workspaces/ws_test/invoices/in_1/send"},
-		{func() { s.queue(200, invoiceJSON); _, _ = c.Invoices.Remind(bgCtx(), "in_1") }, "/v1/workspaces/ws_test/invoices/in_1/reminder"},
-		{func() { s.queue(200, invoiceJSON); _, _ = c.Invoices.Void(bgCtx(), "in_1") }, "/v1/workspaces/ws_test/invoices/in_1/void"},
+		{func() { s.queue(200, invoiceWrappedJSON); _, _ = c.Invoices.Send(bgCtx(), "in_1") }, "/v1/workspaces/ws_test/invoices/in_1/send"},
+		{func() { s.queue(200, invoiceWrappedJSON); _, _ = c.Invoices.Remind(bgCtx(), "in_1") }, "/v1/workspaces/ws_test/invoices/in_1/reminder"},
+		{func() { s.queue(200, invoiceWrappedJSON); _, _ = c.Invoices.Void(bgCtx(), "in_1") }, "/v1/workspaces/ws_test/invoices/in_1/void"},
 	}
 	for _, tc := range cases {
 		tc.op()
@@ -398,7 +398,7 @@ func TestPaths_Payments(t *testing.T) {
 			_, _ = c.Payments.Refund(bgCtx(), "pay_1", InitiateRefundRequest{})
 		}, "/v1/workspaces/ws_test/payments/pay_1/refund"},
 		{func() {
-			s.queue(200, paymentJSON)
+			s.queue(200, paymentWrappedJSON)
 			_, _ = c.Payments.RefundBroadcast(bgCtx(), "pay_1", RecordRefundBroadcastRequest{RefundTxHash: "0x1"})
 		}, "/v1/workspaces/ws_test/payments/pay_1/refund/broadcast"},
 	}
@@ -419,7 +419,7 @@ func TestPaths_WebhookEndpoints(t *testing.T) {
 		path string
 	}{
 		{func() { s.queue(200, `{"data":[]}`); _, _ = c.WebhookEndpoints.List(bgCtx()) }, "/v1/workspaces/ws_test/webhook_endpoints"},
-		{func() { s.queue(200, endpointJSON); _, _ = c.WebhookEndpoints.Retrieve(bgCtx(), "we_1") }, "/v1/workspaces/ws_test/webhook_endpoints/we_1"},
+		{func() { s.queue(200, endpointWrappedJSON); _, _ = c.WebhookEndpoints.Retrieve(bgCtx(), "we_1") }, "/v1/workspaces/ws_test/webhook_endpoints/we_1"},
 		{func() {
 			s.queue(200, `{"secret":"s","rotationGraceUntil":""}`)
 			_, _ = c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1", RotateWebhookSecretRequest{})
@@ -447,7 +447,7 @@ func TestPaths_Products(t *testing.T) {
 	}{
 		{func() { s.queue(200, `{"data":[]}`); _, _ = c.Products.ListPrices(bgCtx(), "prod_1") }, "/v1/workspaces/ws_test/products/prod_1/prices"},
 		{func() {
-			s.queue(200, priceJSON)
+			s.queue(200, priceWrappedJSON)
 			_, _ = c.Products.CreatePrice(bgCtx(), "prod_1", CreatePriceRequest{Amount: 100, Interval: PriceMonth})
 		}, "/v1/workspaces/ws_test/products/prod_1/prices"},
 		{func() { s.queue(204, ""); _ = c.Products.DeletePrice(bgCtx(), "price_1") }, "/v1/workspaces/ws_test/prices/price_1"},
@@ -472,13 +472,13 @@ func TestMethods_AllResources(t *testing.T) {
 		method string
 	}
 	cases := []call{
-		{func() { s.queue(200, customerJSON); _, _ = c.Customers.Retrieve(bgCtx(), "x") }, http.MethodGet},
+		{func() { s.queue(200, customerWrappedJSON); _, _ = c.Customers.Retrieve(bgCtx(), "x") }, http.MethodGet},
 		{func() {
-			s.queue(200, customerJSON)
+			s.queue(200, customerWrappedJSON)
 			_, _ = c.Customers.Create(bgCtx(), CreateCustomerRequest{Email: "a@b"})
 		}, http.MethodPost},
 		{func() {
-			s.queue(200, customerJSON)
+			s.queue(200, customerWrappedJSON)
 			n := "n"
 			_, _ = c.Customers.Update(bgCtx(), "x", UpdateCustomerRequest{Name: &n})
 		}, http.MethodPatch},
@@ -614,7 +614,7 @@ func TestHTTP_RetrieveWithNullableFields(t *testing.T) {
 	defer s.Close()
 	c := newTestClient(t, s)
 	// All optional fields null — should still decode cleanly.
-	s.queue(200, `{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"","wallet":null,"country":null,"status":"churned","activeSubscriptions":0,"lifetimeValue":0,"metadata":null,"createdAt":"","deletedAt":null}`)
+	s.queue(200, `{"customer":{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"","wallet":null,"country":null,"status":"churned","activeSubscriptions":0,"lifetimeValue":0,"metadata":null,"createdAt":"","deletedAt":null}}`)
 	out, err := c.Customers.Retrieve(bgCtx(), "cu_1")
 	if err != nil {
 		t.Fatal(err)
@@ -631,7 +631,7 @@ func TestHTTP_RetrieveWithMetadata(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, `{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"","wallet":null,"country":null,"status":"active","activeSubscriptions":0,"lifetimeValue":0,"metadata":{"plan":"pro","seats":5},"createdAt":"","deletedAt":null}`)
+	s.queue(200, `{"customer":{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"","wallet":null,"country":null,"status":"active","activeSubscriptions":0,"lifetimeValue":0,"metadata":{"plan":"pro","seats":5},"createdAt":"","deletedAt":null}}`)
 	out, err := c.Customers.Retrieve(bgCtx(), "cu_1")
 	if err != nil {
 		t.Fatal(err)
@@ -834,7 +834,7 @@ func TestHTTP_RetryWithNetworkErrorThenSuccess(t *testing.T) {
 	// error, the server then comes back. We can't easily reopen so just
 	// assert the retry happened by counting sleeps.
 	s := newStubServer()
-	s.queue(200, customerJSON) // never reached for first attempt
+	s.queue(200, customerWrappedJSON) // never reached for first attempt
 	c, err := NewClient("sk_test_x", "ws_x", WithBaseURL("http://127.0.0.1:1"))
 	if err != nil {
 		t.Fatal(err)
