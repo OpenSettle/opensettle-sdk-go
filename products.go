@@ -114,3 +114,18 @@ func (r *ProductsResource) DeletePrice(ctx context.Context, priceID string) erro
 		method: http.MethodDelete,
 	}, nil)
 }
+
+// ListIter returns a cursor-driven iterator over all products matching
+// the query.
+func (r *ProductsResource) ListIter(ctx context.Context, query *ListProductsQuery) *Iter[Product] {
+	return newIter(ctx, func(ctx context.Context, cursor string) (*CursorPage[Product], error) {
+		q := ListProductsQuery{}
+		if query != nil {
+			q = *query
+		}
+		if cursor != "" {
+			q.Cursor = cursor
+		}
+		return r.List(ctx, &q)
+	})
+}

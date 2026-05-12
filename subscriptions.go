@@ -113,3 +113,18 @@ func (r *SubscriptionsResource) ChangePlan(ctx context.Context, subID string, in
 	}
 	return w.Subscription, nil
 }
+
+// ListIter returns a cursor-driven iterator over all subscriptions
+// matching the query.
+func (r *SubscriptionsResource) ListIter(ctx context.Context, query *ListSubscriptionsQuery) *Iter[Subscription] {
+	return newIter(ctx, func(ctx context.Context, cursor string) (*CursorPage[Subscription], error) {
+		q := ListSubscriptionsQuery{}
+		if query != nil {
+			q = *query
+		}
+		if cursor != "" {
+			q.Cursor = cursor
+		}
+		return r.List(ctx, &q)
+	})
+}

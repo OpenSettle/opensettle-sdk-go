@@ -83,3 +83,18 @@ func (r *PaymentsResource) RefundBroadcast(ctx context.Context, paymentID string
 	}
 	return w.Payment, nil
 }
+
+// ListIter returns a cursor-driven iterator over all payments matching
+// the query.
+func (r *PaymentsResource) ListIter(ctx context.Context, query *ListPaymentsQuery) *Iter[Payment] {
+	return newIter(ctx, func(ctx context.Context, cursor string) (*CursorPage[Payment], error) {
+		q := ListPaymentsQuery{}
+		if query != nil {
+			q = *query
+		}
+		if cursor != "" {
+			q.Cursor = cursor
+		}
+		return r.List(ctx, &q)
+	})
+}

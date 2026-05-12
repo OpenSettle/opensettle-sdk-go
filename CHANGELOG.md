@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Major versions track the HTTP API major version (`v1`).
 
+## [0.3.0] - 2026-05-12
+
+### Added
+
+- **Iterator API for paginated list endpoints** — `c.Customers.ListIter(ctx, q)`
+  (and analogues on Products, Invoices, Payments, Subscriptions) returns
+  `*Iter[T]` that walks every page transparently:
+
+      it := c.Customers.ListIter(ctx, &opensettle.ListCustomersQuery{Status: opensettle.CustomerActive})
+      for it.Next() {
+          fmt.Println(it.Item().ID)
+      }
+      if err := it.Err(); err != nil { return err }
+
+- **`WaitFor` polling helper** — `opensettle.WaitFor(ctx, c.Payments.Retrieve,
+  "pay_…", func(p *Payment) bool { return p.Status == opensettle.PaymentConfirmed },
+  opensettle.WaitOptions{Timeout: 2*time.Minute, Interval: 2*time.Second})`.
+  Returns `*WaitTimeoutError` on timeout (carries the last-observed
+  resource) and wraps `context.Canceled` cleanly.
+
+### Fixed
+
+- **`Checkout.Description` field removed** — the underlying API schema
+  doesn't have this field; it was a hallucinated leftover. Pre-existing
+  code that read `chk.Description` will get a build error and should
+  be updated to drop the reference.
+
 ## [0.2.0] - 2026-05-12
 
 **Breaking** — discovered via live smoke against `api.opensettle.io`.

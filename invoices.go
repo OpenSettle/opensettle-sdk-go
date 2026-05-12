@@ -98,3 +98,18 @@ func (r *InvoicesResource) Void(ctx context.Context, invoiceID string) (*Invoice
 	}
 	return w.Invoice, nil
 }
+
+// ListIter returns a cursor-driven iterator over all invoices matching
+// the query.
+func (r *InvoicesResource) ListIter(ctx context.Context, query *ListInvoicesQuery) *Iter[Invoice] {
+	return newIter(ctx, func(ctx context.Context, cursor string) (*CursorPage[Invoice], error) {
+		q := ListInvoicesQuery{}
+		if query != nil {
+			q = *query
+		}
+		if cursor != "" {
+			q.Cursor = cursor
+		}
+		return r.List(ctx, &q)
+	})
+}

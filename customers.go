@@ -86,3 +86,22 @@ func (r *CustomersResource) Delete(ctx context.Context, customerID string) error
 		method: http.MethodDelete,
 	}, nil)
 }
+
+// ListIter returns a cursor-driven iterator over all customers matching
+// the query. Auto-fetches subsequent pages.
+//
+//	it := c.Customers.ListIter(ctx, &opensettle.ListCustomersQuery{Status: opensettle.CustomerActive})
+//	for it.Next() { fmt.Println(it.Item().ID) }
+//	if err := it.Err(); err != nil { … }
+func (r *CustomersResource) ListIter(ctx context.Context, query *ListCustomersQuery) *Iter[Customer] {
+	return newIter(ctx, func(ctx context.Context, cursor string) (*CursorPage[Customer], error) {
+		q := ListCustomersQuery{}
+		if query != nil {
+			q = *query
+		}
+		if cursor != "" {
+			q.Cursor = cursor
+		}
+		return r.List(ctx, &q)
+	})
+}
