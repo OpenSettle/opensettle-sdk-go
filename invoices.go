@@ -11,6 +11,10 @@ type InvoicesResource struct {
 	http *httpClient
 }
 
+type invoiceWrapper struct {
+	Invoice *Invoice `json:"invoice"`
+}
+
 func (r *InvoicesResource) List(ctx context.Context, query *ListInvoicesQuery) (*CursorPage[Invoice], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -36,61 +40,61 @@ func (r *InvoicesResource) List(ctx context.Context, query *ListInvoicesQuery) (
 }
 
 func (r *InvoicesResource) Retrieve(ctx context.Context, invoiceID string) (*Invoice, error) {
-	out := &Invoice{}
-	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID), requestOptions{}, out)
+	var w invoiceWrapper
+	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID), requestOptions{}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Invoice, nil
 }
 
 func (r *InvoicesResource) Create(ctx context.Context, input CreateInvoiceRequest) (*Invoice, error) {
-	out := &Invoice{}
+	var w invoiceWrapper
 	err := r.http.request(ctx, "/invoices", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Invoice, nil
 }
 
 // Send emails the hosted invoice link to the customer.
 func (r *InvoicesResource) Send(ctx context.Context, invoiceID string) (*Invoice, error) {
-	out := &Invoice{}
+	var w invoiceWrapper
 	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/send", requestOptions{
 		method:      http.MethodPost,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Invoice, nil
 }
 
 // Remind re-sends a reminder for an unpaid invoice.
 func (r *InvoicesResource) Remind(ctx context.Context, invoiceID string) (*Invoice, error) {
-	out := &Invoice{}
+	var w invoiceWrapper
 	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/reminder", requestOptions{
 		method:      http.MethodPost,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Invoice, nil
 }
 
 // Void marks an unpaid invoice as void. Terminal state.
 func (r *InvoicesResource) Void(ctx context.Context, invoiceID string) (*Invoice, error) {
-	out := &Invoice{}
+	var w invoiceWrapper
 	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/void", requestOptions{
 		method: http.MethodPost,
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Invoice, nil
 }

@@ -38,39 +38,45 @@ func (r *CustomersResource) List(ctx context.Context, query *ListCustomersQuery)
 
 // Retrieve fetches a customer by id.
 func (r *CustomersResource) Retrieve(ctx context.Context, customerID string) (*Customer, error) {
-	out := &Customer{}
-	err := r.http.request(ctx, "/customers/"+url.PathEscape(customerID), requestOptions{}, out)
+	var wrapper struct {
+		Customer *Customer `json:"customer"`
+	}
+	err := r.http.request(ctx, "/customers/"+url.PathEscape(customerID), requestOptions{}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Customer, nil
 }
 
 // Create makes a new customer. Auto-attaches an Idempotency-Key.
 func (r *CustomersResource) Create(ctx context.Context, input CreateCustomerRequest) (*Customer, error) {
-	out := &Customer{}
+	var wrapper struct {
+		Customer *Customer `json:"customer"`
+	}
 	err := r.http.request(ctx, "/customers", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Customer, nil
 }
 
 // Update applies a partial update.
 func (r *CustomersResource) Update(ctx context.Context, customerID string, input UpdateCustomerRequest) (*Customer, error) {
-	out := &Customer{}
+	var wrapper struct {
+		Customer *Customer `json:"customer"`
+	}
 	err := r.http.request(ctx, "/customers/"+url.PathEscape(customerID), requestOptions{
 		method: http.MethodPatch,
 		body:   input,
-	}, out)
+	}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Customer, nil
 }
 
 // Delete is a soft-delete: PII is scrubbed but historical references

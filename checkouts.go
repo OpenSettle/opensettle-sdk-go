@@ -11,27 +11,31 @@ type CheckoutsResource struct {
 	http *httpClient
 }
 
+type checkoutWrapper struct {
+	Checkout *Checkout `json:"checkout"`
+}
+
 // Create starts a hosted checkout session. Body is required; the request
 // is sent with an auto-generated Idempotency-Key to make retries safe.
 func (r *CheckoutsResource) Create(ctx context.Context, input CreateCheckoutRequest) (*Checkout, error) {
-	out := &Checkout{}
+	var w checkoutWrapper
 	err := r.http.request(ctx, "/checkouts", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Checkout, nil
 }
 
 // Retrieve fetches a checkout session by id.
 func (r *CheckoutsResource) Retrieve(ctx context.Context, id string) (*Checkout, error) {
-	out := &Checkout{}
-	err := r.http.request(ctx, "/checkouts/"+url.PathEscape(id), requestOptions{}, out)
+	var w checkoutWrapper
+	err := r.http.request(ctx, "/checkouts/"+url.PathEscape(id), requestOptions{}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Checkout, nil
 }

@@ -8,6 +8,7 @@ import (
 )
 
 const invoiceJSON = `{"id":"in_1","workspaceId":"ws","number":"INV-1","customerId":"cu_1","subscriptionId":null,"amountMinor":5000,"currency":"USD","chain":"base","token":"USDC","status":"open","lineItems":[{"description":"item","quantity":1,"unitAmountMinor":5000}],"memo":null,"paymentId":null,"hostedUrl":"https://example/in_1","issuedAt":null,"dueAt":"2026-05-26T00:00:00.000Z","paidAt":null,"voidedAt":null,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z"}`
+const invoiceWrappedJSON = `{"invoice":` + invoiceJSON + `}`
 
 func TestInvoices_List(t *testing.T) {
 	s := newStubServer()
@@ -41,7 +42,7 @@ func TestInvoices_Retrieve(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, invoiceJSON)
+	s.queue(200, invoiceWrappedJSON)
 	out, err := c.Invoices.Retrieve(bgCtx(), "in_1")
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +56,7 @@ func TestInvoices_Create_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, invoiceJSON)
+	s.queue(200, invoiceWrappedJSON)
 	out, err := c.Invoices.Create(bgCtx(), CreateInvoiceRequest{
 		CustomerID: "cu_1",
 		Chain:      ChainBase,
@@ -81,7 +82,7 @@ func TestInvoices_Send_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, invoiceJSON)
+	s.queue(200, invoiceWrappedJSON)
 	_, err := c.Invoices.Send(bgCtx(), "in_1")
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +103,7 @@ func TestInvoices_Remind_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, invoiceJSON)
+	s.queue(200, invoiceWrappedJSON)
 	_, err := c.Invoices.Remind(bgCtx(), "in_1")
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +117,7 @@ func TestInvoices_Void_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, invoiceJSON)
+	s.queue(200, invoiceWrappedJSON)
 	_, err := c.Invoices.Void(bgCtx(), "in_1")
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +148,7 @@ func TestInvoices_Create_LineItemsSerialize(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, invoiceJSON)
+	s.queue(200, invoiceWrappedJSON)
 	_, _ = c.Invoices.Create(bgCtx(), CreateInvoiceRequest{
 		CustomerID: "cu_1",
 		Chain:      ChainEthereum,

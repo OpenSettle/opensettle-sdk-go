@@ -8,12 +8,13 @@ import (
 )
 
 const checkoutJSON = `{"id":"co_1","workspaceId":"ws","mode":"payment","status":"open","customerId":"cu_1","invoiceId":"in_1","priceId":null,"amountMinor":1000,"currency":"USD","chain":"base","token":"USDC","description":null,"successUrl":"https://example/ok","cancelUrl":null,"expiresAt":"2026-05-12T16:00:00.000Z","completedAt":null,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z","updatedAt":"2026-05-12T15:00:00.000Z"}`
+const checkoutWrappedJSON = `{"checkout":` + checkoutJSON + `}`
 
 func TestCheckouts_Create_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, checkoutJSON)
+	s.queue(200, checkoutWrappedJSON)
 	out, err := c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{
 		Mode:       CheckoutPayment,
 		CustomerID: "cu_1",
@@ -35,7 +36,7 @@ func TestCheckouts_Create_Method(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, checkoutJSON)
+	s.queue(200, checkoutWrappedJSON)
 	_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{Mode: CheckoutPayment})
 	r := s.lastRequest(t)
 	if r.Method != http.MethodPost {
@@ -50,7 +51,7 @@ func TestCheckouts_Create_AttachesIdempotencyKey(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, checkoutJSON)
+	s.queue(200, checkoutWrappedJSON)
 	_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{Mode: CheckoutPayment})
 	if got := s.lastRequest(t).Headers.Get("Idempotency-Key"); got == "" {
 		t.Fatalf("missing key")
@@ -61,7 +62,7 @@ func TestCheckouts_Create_BodySerialization(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, checkoutJSON)
+	s.queue(200, checkoutWrappedJSON)
 	_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{
 		Mode:       CheckoutSubscription,
 		CustomerID: "cu_1",
@@ -87,7 +88,7 @@ func TestCheckouts_Retrieve_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, checkoutJSON)
+	s.queue(200, checkoutWrappedJSON)
 	out, err := c.Checkouts.Retrieve(bgCtx(), "co_1")
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +144,7 @@ func TestCheckouts_BodyIsJSON(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, checkoutJSON)
+	s.queue(200, checkoutWrappedJSON)
 	_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{Mode: CheckoutPayment, SuccessURL: "https://a"})
 	got := string(s.lastRequest(t).Body)
 	if !strings.HasPrefix(got, "{") || !strings.HasSuffix(got, "}") {

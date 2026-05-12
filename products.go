@@ -34,37 +34,43 @@ func (r *ProductsResource) List(ctx context.Context, query *ListProductsQuery) (
 }
 
 func (r *ProductsResource) Retrieve(ctx context.Context, productID string) (*Product, error) {
-	out := &Product{}
-	err := r.http.request(ctx, "/products/"+url.PathEscape(productID), requestOptions{}, out)
+	var wrapper struct {
+		Product *Product `json:"product"`
+	}
+	err := r.http.request(ctx, "/products/"+url.PathEscape(productID), requestOptions{}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Product, nil
 }
 
 func (r *ProductsResource) Create(ctx context.Context, input CreateProductRequest) (*Product, error) {
-	out := &Product{}
+	var wrapper struct {
+		Product *Product `json:"product"`
+	}
 	err := r.http.request(ctx, "/products", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Product, nil
 }
 
 func (r *ProductsResource) Update(ctx context.Context, productID string, input UpdateProductRequest) (*Product, error) {
-	out := &Product{}
+	var wrapper struct {
+		Product *Product `json:"product"`
+	}
 	err := r.http.request(ctx, "/products/"+url.PathEscape(productID), requestOptions{
 		method: http.MethodPatch,
 		body:   input,
-	}, out)
+	}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Product, nil
 }
 
 // Delete is a hard-delete. Returns *ConflictError (409) if any
@@ -87,16 +93,18 @@ func (r *ProductsResource) ListPrices(ctx context.Context, productID string) ([]
 
 // CreatePrice attaches a new price to a product.
 func (r *ProductsResource) CreatePrice(ctx context.Context, productID string, input CreatePriceRequest) (*Price, error) {
-	out := &Price{}
+	var wrapper struct {
+		Price *Price `json:"price"`
+	}
 	err := r.http.request(ctx, "/products/"+url.PathEscape(productID)+"/prices", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &wrapper)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return wrapper.Price, nil
 }
 
 // DeletePrice hard-deletes a price. Returns *ConflictError (409) if any

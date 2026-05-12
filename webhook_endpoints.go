@@ -11,6 +11,10 @@ type WebhookEndpointsResource struct {
 	http *httpClient
 }
 
+type endpointWrapper struct {
+	Endpoint *WebhookEndpoint `json:"endpoint"`
+}
+
 // List returns every webhook endpoint configured for the workspace.
 // The endpoint is small enough that the API doesn't paginate.
 func (r *WebhookEndpointsResource) List(ctx context.Context) ([]WebhookEndpoint, error) {
@@ -23,16 +27,17 @@ func (r *WebhookEndpointsResource) List(ctx context.Context) ([]WebhookEndpoint,
 }
 
 func (r *WebhookEndpointsResource) Retrieve(ctx context.Context, endpointID string) (*WebhookEndpoint, error) {
-	out := &WebhookEndpoint{}
-	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID), requestOptions{}, out)
+	var w endpointWrapper
+	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID), requestOptions{}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Endpoint, nil
 }
 
 // Create makes a new endpoint. The response includes the plaintext
-// signing secret exactly once — store it immediately.
+// signing secret exactly once — store it immediately. Multi-key
+// envelope {endpoint, signingSecret} preserved.
 func (r *WebhookEndpointsResource) Create(ctx context.Context, input CreateWebhookEndpointRequest) (*CreateWebhookEndpointResponse, error) {
 	out := &CreateWebhookEndpointResponse{}
 	err := r.http.request(ctx, "/webhook_endpoints", requestOptions{
@@ -47,15 +52,15 @@ func (r *WebhookEndpointsResource) Create(ctx context.Context, input CreateWebho
 }
 
 func (r *WebhookEndpointsResource) Update(ctx context.Context, endpointID string, input UpdateWebhookEndpointRequest) (*WebhookEndpoint, error) {
-	out := &WebhookEndpoint{}
+	var w endpointWrapper
 	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID), requestOptions{
 		method: http.MethodPatch,
 		body:   input,
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Endpoint, nil
 }
 
 func (r *WebhookEndpointsResource) Delete(ctx context.Context, endpointID string) error {
@@ -64,11 +69,12 @@ func (r *WebhookEndpointsResource) Delete(ctx context.Context, endpointID string
 	}, nil)
 }
 
-// RotateSecret rotates the signing secret. The returned secret is the
-// new plaintext; the previous secret remains valid until
-// RotationGraceUntil so consumers can roll without downtime.
-func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID string, input RotateWebhookSecretRequest) (*RotateWebhookSecretResponse, error) {
-	out := &RotateWebhookSecretResponse{}
+// RotateSecret rotates the signing secret. Returns the same
+// {endpoint, signingSecret} envelope as Create — store SigningSecret
+// immediately. Step-up auth (AAL=2) required; API-key callers receive
+// *StepUpRequiredError.
+func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID string, input RotateWebhookSecretRequest) (*CreateWebhookEndpointResponse, error) {
+	out := &CreateWebhookEndpointResponse{}
 	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID)+"/rotate", requestOptions{
 		method:      http.MethodPost,
 		body:        input,

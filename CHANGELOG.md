@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Major versions track the HTTP API major version (`v1`).
 
+## [0.2.0] - 2026-05-12
+
+**Breaking** — discovered via live smoke against `api.opensettle.io`.
+The 0.1.0 SDK was unmarshalling singleton responses into the resource
+struct directly, but the API returns `{"customer": {…}}`,
+`{"product": {…}}`, etc. — so every `Retrieve`/`Create`/`Update` was
+returning a zero-valued struct.
+
+### Fixed
+
+- **Singleton response envelope unwrapping.** Each resource method
+  now unmarshals into an internal wrapper struct
+  (`struct { Customer *Customer ` + "`json:\"customer\"`" + ` }` etc.) and
+  returns the inner pointer. Lists (`{data, nextCursor, hasMore}`)
+  and multi-key envelopes (`Refund` returns `{payment, unsignedTx}`;
+  `Create`/`RotateSecret` on webhook endpoints returns
+  `{endpoint, signingSecret}`) pass through unchanged.
+- **`RotateWebhookSecretResponse` shape**: was
+  `{secret, rotationGraceUntil}`, never what the API actually returns.
+  Replaced with a type alias to `CreateWebhookEndpointResponse`
+  (the actual shape: `{Endpoint, SigningSecret}`). Callers using
+  `.Secret` should switch to `.SigningSecret`, and `.RotationGraceUntil`
+  now lives on the embedded `Endpoint.RotationGraceUntil` field.
+- Test fixtures across all resources updated to match the real API's
+  envelope shape — the prior fixtures masked the bug.
+
+### Migration
+
+- `RotateSecret(…).Secret` → `RotateSecret(…).SigningSecret`
+- `RotateSecret(…).RotationGraceUntil` → `RotateSecret(…).Endpoint.RotationGraceUntil`
+- No other source changes; resource method signatures are unchanged
+  (same `*Customer, error` etc. returns — just now correctly populated).
+
 ## [0.1.0] - 2026-05-12
 
 ### Added

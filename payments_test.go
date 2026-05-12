@@ -8,6 +8,7 @@ import (
 )
 
 const paymentJSON = `{"id":"pay_1","workspaceId":"ws","customerId":"cu_1","subscriptionId":null,"invoiceId":"in_1","walletId":null,"amountMinor":5000,"feeMinor":50,"netMinor":4950,"currency":"USD","token":"USDC","chain":"base","status":"confirmed","failureReason":null,"description":null,"txHash":"0xabc","blockNumber":1234,"confirmations":12,"refundTxHash":null,"refundAmountMinor":null,"refundBroadcastAt":null,"refundedAt":null,"refundReason":null,"createdAt":"2026-05-12T15:00:00.000Z","confirmedAt":"2026-05-12T15:01:00.000Z"}`
+const paymentWrappedJSON = `{"payment":` + paymentJSON + `}`
 
 const refundResponseJSON = `{"payment":` + paymentJSON + `,"unsignedTx":{"chain":"base","token":"USDC","to":"0xtoken","amountMinor":5000,"instructions":"sign and broadcast"}}`
 
@@ -43,7 +44,7 @@ func TestPayments_Retrieve(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, paymentJSON)
+	s.queue(200, paymentWrappedJSON)
 	out, err := c.Payments.Retrieve(bgCtx(), "pay_1")
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +108,7 @@ func TestPayments_RefundBroadcast(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, paymentJSON)
+	s.queue(200, paymentWrappedJSON)
 	_, err := c.Payments.RefundBroadcast(bgCtx(), "pay_1", RecordRefundBroadcastRequest{RefundTxHash: "0xdead"})
 	if err != nil {
 		t.Fatal(err)

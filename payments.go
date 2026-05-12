@@ -11,6 +11,10 @@ type PaymentsResource struct {
 	http *httpClient
 }
 
+type paymentWrapper struct {
+	Payment *Payment `json:"payment"`
+}
+
 func (r *PaymentsResource) List(ctx context.Context, query *ListPaymentsQuery) (*CursorPage[Payment], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -36,18 +40,21 @@ func (r *PaymentsResource) List(ctx context.Context, query *ListPaymentsQuery) (
 }
 
 func (r *PaymentsResource) Retrieve(ctx context.Context, paymentID string) (*Payment, error) {
-	out := &Payment{}
-	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID), requestOptions{}, out)
+	var w paymentWrapper
+	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID), requestOptions{}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Payment, nil
 }
 
-// Refund initiates a refund. Returns the unsigned-tx payload — the
-// merchant's wallet signs and broadcasts it; OpenSettle never holds
-// funds. Step-up auth (AAL=2) is required on this route, surfaced as
-// *StepUpRequiredError when missing.
+// Refund initiates a refund. Returns a multi-key envelope
+// {payment, unsignedTx} — the merchant's wallet signs unsignedTx and
+// broadcasts it; OpenSettle never holds funds.
+//
+// Step-up auth (AAL=2) is required on this route, surfaced as
+// *StepUpRequiredError for API-key callers. Sessions get through if
+// they re-authed within freshWithinSeconds.
 func (r *PaymentsResource) Refund(ctx context.Context, paymentID string, input InitiateRefundRequest) (*InitiateRefundResponse, error) {
 	out := &InitiateRefundResponse{}
 	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID)+"/refund", requestOptions{
@@ -65,14 +72,14 @@ func (r *PaymentsResource) Refund(ctx context.Context, paymentID string, input I
 // broadcast the refund tx. The chain reader picks it up and flips
 // status to refunded once it confirms.
 func (r *PaymentsResource) RefundBroadcast(ctx context.Context, paymentID string, input RecordRefundBroadcastRequest) (*Payment, error) {
-	out := &Payment{}
+	var w paymentWrapper
 	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID)+"/refund/broadcast", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Payment, nil
 }

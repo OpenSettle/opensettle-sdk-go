@@ -8,6 +8,7 @@ import (
 )
 
 const customerJSON = `{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"A B","wallet":null,"country":null,"status":"active","activeSubscriptions":0,"lifetimeValue":0,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z","deletedAt":null}`
+const customerWrappedJSON = `{"customer":` + customerJSON + `}`
 
 func TestCustomers_List_HappyPath(t *testing.T) {
 	s := newStubServer()
@@ -52,7 +53,7 @@ func TestCustomers_Retrieve_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	out, err := c.Customers.Retrieve(bgCtx(), "cu_1")
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +79,7 @@ func TestCustomers_Create_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	out, err := c.Customers.Create(bgCtx(), CreateCustomerRequest{Email: "a@b", Name: "A B"})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +96,7 @@ func TestCustomers_Create_AttachesIdempotencyKey(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	_, _ = c.Customers.Create(bgCtx(), CreateCustomerRequest{Email: "a@b"})
 	if k := s.lastRequest(t).Headers.Get("Idempotency-Key"); k == "" {
 		t.Fatalf("missing key")
@@ -106,7 +107,7 @@ func TestCustomers_Update_PATCH(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	name := "New Name"
 	_, err := c.Customers.Update(bgCtx(), "cu_1", UpdateCustomerRequest{Name: &name})
 	if err != nil {
@@ -126,7 +127,7 @@ func TestCustomers_Update_NoIdempotencyKey(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	name := "X"
 	_, _ = c.Customers.Update(bgCtx(), "cu_1", UpdateCustomerRequest{Name: &name})
 	if k := s.lastRequest(t).Headers.Get("Idempotency-Key"); k != "" {
@@ -178,7 +179,7 @@ func TestCustomers_Path(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, customerJSON)
+	s.queue(200, customerWrappedJSON)
 	_, _ = c.Customers.Retrieve(bgCtx(), "cu_1")
 	if got := s.lastRequest(t).Path; got != "/v1/workspaces/ws_test/customers/cu_1" {
 		t.Fatalf("path: %s", got)

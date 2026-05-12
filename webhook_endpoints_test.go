@@ -7,6 +7,7 @@ import (
 )
 
 const endpointJSON = `{"id":"we_1","workspaceId":"ws","url":"https://example/webhook","description":null,"events":["*"],"status":"enabled","successRate":1.0,"rotationGraceUntil":null,"createdAt":"2026-05-12T15:00:00.000Z"}`
+const endpointWrappedJSON = `{"endpoint":` + endpointJSON + `}`
 const createEndpointResponseJSON = `{"endpoint":` + endpointJSON + `,"signingSecret":"whsec_test_abc"}`
 
 func TestWebhookEndpoints_List(t *testing.T) {
@@ -27,7 +28,7 @@ func TestWebhookEndpoints_Retrieve(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, endpointJSON)
+	s.queue(200, endpointWrappedJSON)
 	out, err := c.WebhookEndpoints.Retrieve(bgCtx(), "we_1")
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +80,7 @@ func TestWebhookEndpoints_Update(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, endpointJSON)
+	s.queue(200, endpointWrappedJSON)
 	status := WebhookDisabled
 	_, err := c.WebhookEndpoints.Update(bgCtx(), "we_1", UpdateWebhookEndpointRequest{Status: &status})
 	if err != nil {
@@ -109,16 +110,16 @@ func TestWebhookEndpoints_RotateSecret(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, `{"secret":"whsec_new","rotationGraceUntil":"2026-05-13T15:00:00Z"}`)
+	s.queue(200, `{"endpoint":` + endpointJSON + `,"signingSecret":"whsec_new"}`)
 	out, err := c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1", RotateWebhookSecretRequest{GraceSeconds: 3600})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Secret != "whsec_new" {
-		t.Fatalf("secret: %s", out.Secret)
+	if out.SigningSecret != "whsec_new" {
+		t.Fatalf("signingSecret: %s", out.SigningSecret)
 	}
-	if out.RotationGraceUntil == "" {
-		t.Fatalf("grace empty")
+	if out.Endpoint.ID != "we_1" {
+		t.Fatalf("endpoint.id: %s", out.Endpoint.ID)
 	}
 	r := s.lastRequest(t)
 	if r.Path != "/v1/workspaces/ws_test/webhook_endpoints/we_1/rotate" {

@@ -8,6 +8,7 @@ import (
 )
 
 const subscriptionJSON = `{"id":"sub_1","workspaceId":"ws","customerId":"cu_1","productId":"prod_1","priceId":"price_1","amountMinor":1000,"currency":"USD","chain":"base","token":"USDC","status":"active","autopay":"allowance","allowanceTx":null,"allowanceRemaining":null,"trialEndsAt":null,"startedAt":"2026-05-12T15:00:00.000Z","currentPeriodEnd":"2026-06-12T15:00:00.000Z","nextBillingDate":"2026-06-12T15:00:00.000Z","canceledAt":null,"cancelReason":null,"pausedAt":null,"mrrMinor":1000,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z"}`
+const subscriptionWrappedJSON = `{"subscription":` + subscriptionJSON + `}`
 
 func TestSubscriptions_List(t *testing.T) {
 	s := newStubServer()
@@ -41,7 +42,7 @@ func TestSubscriptions_Retrieve(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	out, err := c.Subscriptions.Retrieve(bgCtx(), "sub_1")
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +56,7 @@ func TestSubscriptions_Create(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	_, err := c.Subscriptions.Create(bgCtx(), CreateSubscriptionRequest{
 		CustomerID: "cu_1",
 		PriceID:    "price_1",
@@ -79,7 +80,7 @@ func TestSubscriptions_Pause(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	_, err := c.Subscriptions.Pause(bgCtx(), "sub_1")
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +95,7 @@ func TestSubscriptions_Resume(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	_, err := c.Subscriptions.Resume(bgCtx(), "sub_1")
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +110,7 @@ func TestSubscriptions_Cancel(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	_, err := c.Subscriptions.Cancel(bgCtx(), "sub_1", CancelSubscriptionRequest{Mode: CancelImmediately, Reason: "test"})
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +128,7 @@ func TestSubscriptions_Cancel_EmptyBody(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	_, err := c.Subscriptions.Cancel(bgCtx(), "sub_1", CancelSubscriptionRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +143,7 @@ func TestSubscriptions_ChangePlan(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, subscriptionJSON)
+	s.queue(200, subscriptionWrappedJSON)
 	_, err := c.Subscriptions.ChangePlan(bgCtx(), "sub_1", ChangePlanRequest{PriceID: "price_2", ProrationMode: ProrationImmediately})
 	if err != nil {
 		t.Fatal(err)

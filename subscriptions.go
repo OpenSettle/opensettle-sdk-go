@@ -11,6 +11,10 @@ type SubscriptionsResource struct {
 	http *httpClient
 }
 
+type subscriptionWrapper struct {
+	Subscription *Subscription `json:"subscription"`
+}
+
 func (r *SubscriptionsResource) List(ctx context.Context, query *ListSubscriptionsQuery) (*CursorPage[Subscription], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -36,76 +40,76 @@ func (r *SubscriptionsResource) List(ctx context.Context, query *ListSubscriptio
 }
 
 func (r *SubscriptionsResource) Retrieve(ctx context.Context, subID string) (*Subscription, error) {
-	out := &Subscription{}
-	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID), requestOptions{}, out)
+	var w subscriptionWrapper
+	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID), requestOptions{}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Subscription, nil
 }
 
 func (r *SubscriptionsResource) Create(ctx context.Context, input CreateSubscriptionRequest) (*Subscription, error) {
-	out := &Subscription{}
+	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Subscription, nil
 }
 
 func (r *SubscriptionsResource) Pause(ctx context.Context, subID string) (*Subscription, error) {
-	out := &Subscription{}
+	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/pause", requestOptions{
 		method: http.MethodPost,
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Subscription, nil
 }
 
 func (r *SubscriptionsResource) Resume(ctx context.Context, subID string) (*Subscription, error) {
-	out := &Subscription{}
+	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/resume", requestOptions{
 		method: http.MethodPost,
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Subscription, nil
 }
 
 // Cancel ends a subscription. Mode controls timing (immediately vs
 // at_period_end). Default is at_period_end when input.Mode is empty.
 // Reason is recorded on the audit log.
 func (r *SubscriptionsResource) Cancel(ctx context.Context, subID string, input CancelSubscriptionRequest) (*Subscription, error) {
-	out := &Subscription{}
+	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/cancel", requestOptions{
 		method: http.MethodPost,
 		body:   input,
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Subscription, nil
 }
 
 // ChangePlan swaps the subscription to a new price. ProrationMode
 // controls whether the customer is billed immediately for the delta or
 // at the next period boundary.
 func (r *SubscriptionsResource) ChangePlan(ctx context.Context, subID string, input ChangePlanRequest) (*Subscription, error) {
-	out := &Subscription{}
+	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/change_plan", requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}, &w)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	return w.Subscription, nil
 }

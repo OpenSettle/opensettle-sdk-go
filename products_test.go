@@ -9,6 +9,8 @@ import (
 
 const productJSON = `{"id":"prod_1","workspaceId":"ws","name":"Pro","description":null,"active":true,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z"}`
 const priceJSON = `{"id":"price_1","workspaceId":"ws","productId":"prod_1","amount":1000,"currency":"USD","interval":"month","active":true,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z"}`
+const productWrappedJSON = `{"product":` + productJSON + `}`
+const priceWrappedJSON = `{"price":` + priceJSON + `}`
 
 func TestProducts_List(t *testing.T) {
 	s := newStubServer()
@@ -54,7 +56,7 @@ func TestProducts_Retrieve(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, productJSON)
+	s.queue(200, productWrappedJSON)
 	out, err := c.Products.Retrieve(bgCtx(), "prod_1")
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +70,7 @@ func TestProducts_Create(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, productJSON)
+	s.queue(200, productWrappedJSON)
 	_, err := c.Products.Create(bgCtx(), CreateProductRequest{Name: "Pro"})
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +88,7 @@ func TestProducts_Update(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, productJSON)
+	s.queue(200, productWrappedJSON)
 	name := "Pro+"
 	_, err := c.Products.Update(bgCtx(), "prod_1", UpdateProductRequest{Name: &name})
 	if err != nil {
@@ -141,7 +143,7 @@ func TestProducts_CreatePrice(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, priceJSON)
+	s.queue(200, priceWrappedJSON)
 	out, err := c.Products.CreatePrice(bgCtx(), "prod_1", CreatePriceRequest{Amount: 1000, Interval: PriceMonth})
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +160,7 @@ func TestProducts_CreatePrice_BodySerialization(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
 	c := newTestClient(t, s)
-	s.queue(200, priceJSON)
+	s.queue(200, priceWrappedJSON)
 	_, _ = c.Products.CreatePrice(bgCtx(), "prod_1", CreatePriceRequest{Amount: 2500, Currency: "EUR", Interval: PriceYear})
 	body := decodeBody[map[string]any](t, s.lastRequest(t).Body)
 	if body["amount"].(float64) != 2500 {

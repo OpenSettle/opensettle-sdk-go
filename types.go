@@ -474,10 +474,13 @@ type RotateWebhookSecretRequest struct {
 	GraceSeconds int `json:"graceSeconds,omitempty"`
 }
 
-type RotateWebhookSecretResponse struct {
-	Secret             string `json:"secret"`
-	RotationGraceUntil string `json:"rotationGraceUntil"`
-}
+// RotateWebhookSecretResponse is now an alias for
+// CreateWebhookEndpointResponse — the rotate endpoint returns the same
+// {endpoint, signingSecret} envelope as create.
+//
+// Deprecated: use *CreateWebhookEndpointResponse directly. This alias
+// will be removed in a future release.
+type RotateWebhookSecretResponse = CreateWebhookEndpointResponse
 
 type TestWebhookEndpointRequest struct {
 	EventType string `json:"eventType"`
