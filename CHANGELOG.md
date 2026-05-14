@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Major versions track the HTTP API major version (`v1`).
 
+## [0.4.0] - 2026-05-15
+
+### Fixed
+
+- **`Checkout` struct now matches the API response shape.** Three drifts
+  resolved:
+  - Added `Description *string` field (server returns it; was previously
+    silently dropped during JSON decode).
+  - Added `HostedURL string` field (relative URL path for the buyer-facing
+    hosted checkout; concatenate with the web origin to redirect).
+  - Removed `UpdatedAt string` field (the API never returns this; readers
+    would always see `""`).
+
+### Breaking
+
+- Code that reads `checkout.UpdatedAt` no longer compiles. Replace with a
+  derived timestamp from your own store, or use `checkout.CreatedAt` /
+  `checkout.CompletedAt` if those fit your use case.
+
 ## [0.3.0] - 2026-05-12
 
 ### Added
