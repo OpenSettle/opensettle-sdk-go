@@ -406,13 +406,17 @@ type Checkout struct {
 	Currency    string         `json:"currency"`
 	Chain       ChainId        `json:"chain"`
 	Token       TokenSymbol    `json:"token"`
+	Description *string        `json:"description"`
 	SuccessURL  string         `json:"successUrl"`
 	CancelURL   *string        `json:"cancelUrl"`
 	ExpiresAt   string         `json:"expiresAt"`
 	CompletedAt *string        `json:"completedAt"`
 	Metadata    Metadata       `json:"metadata"`
 	CreatedAt   string         `json:"createdAt"`
-	UpdatedAt   string         `json:"updatedAt"`
+	// HostedURL is a relative URL path (e.g. "/checkout/<hostedToken>");
+	// concatenate with the web origin (e.g. "https://opensettle.io"+HostedURL)
+	// to get the buyer-facing redirect URL.
+	HostedURL string `json:"hostedUrl"`
 }
 
 type CreateCheckoutRequest struct {
