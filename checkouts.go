@@ -17,13 +17,17 @@ type checkoutWrapper struct {
 
 // Create starts a hosted checkout session. Body is required; the request
 // is sent with an auto-generated Idempotency-Key to make retries safe.
-func (r *CheckoutsResource) Create(ctx context.Context, input CreateCheckoutRequest) (*Checkout, error) {
-	var w checkoutWrapper
-	err := r.http.request(ctx, "/checkouts", requestOptions{
+// Supply [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *CheckoutsResource) Create(ctx context.Context, input CreateCheckoutRequest, opts ...RequestOption) (*Checkout, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w checkoutWrapper
+	err := r.http.request(ctx, "/checkouts", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}

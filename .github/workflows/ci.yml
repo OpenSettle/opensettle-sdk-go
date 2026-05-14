@@ -7,9 +7,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         go: ["1.22.x", "1.23.x"]
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +25,13 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "gofmt found unformatted files:" >&2
             echo "$unformatted" >&2
+            exit 1
+          fi
+      - name: go mod tidy is clean
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum 2>/dev/null; then
+            echo "go.mod / go.sum drifted from 'go mod tidy' — please run it locally and commit the result" >&2
             exit 1
           fi
       - name: go vet

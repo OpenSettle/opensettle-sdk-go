@@ -67,6 +67,56 @@ The SDK mirrors the OpenSettle REST API one-to-one:
 
 Every method takes `ctx context.Context` as the first argument, returns `(*ResultType, error)`, and propagates request IDs in error values.
 
+## Pagination
+
+Every `List` method has a sibling `ListIter` that walks every page transparently:
+
+```go
+it := client.Customers.ListIter(ctx, &opensettle.ListCustomersQuery{
+    Status: opensettle.CustomerActive,
+    Limit:  100,
+})
+for it.Next() {
+    fmt.Println(it.Item().ID)
+}
+if err := it.Err(); err != nil {
+    return err
+}
+```
+
+The iterator lazy-fetches the first page on the first `Next()` call and keeps following the `nextCursor` until `hasMore` is false. Filters from the initial query (status, customerId, etc.) are preserved across every page.
+
+## Polling
+
+`WaitFor` polls a `Retrieve` method until a predicate is satisfied. Useful in scripts and CI; production code should prefer webhooks.
+
+```go
+pmt, err := opensettle.WaitFor(ctx,
+    client.Payments.Retrieve,
+    "pay_123",
+    func(p *opensettle.Payment) bool { return p.Status == opensettle.PaymentConfirmed },
+    opensettle.WaitOptions{Timeout: 2 * time.Minute, Interval: 2 * time.Second},
+)
+if err != nil {
+    var to *opensettle.WaitTimeoutError
+    if errors.As(err, &to) {
+        last, _ := to.Last.(*opensettle.Payment)
+        log.Printf("timed out; last status: %s", last.Status)
+    }
+    return err
+}
+```
+
+## Idempotency keys
+
+Every money-adjacent write — `Checkouts.Create`, `Customers.Create`, `Invoices.Create/Send/Remind`, `Payments.Refund/RefundBroadcast`, `Products.Create/CreatePrice`, `Subscriptions.Create/ChangePlan`, `WebhookEndpoints.Create/RotateSecret` — auto-attaches an `Idempotency-Key` that is preserved across retry attempts. To supply your own deterministic key (e.g. your DB row id) so retries from multiple machines collapse to the same server-side operation, pass `WithIdempotencyKey`:
+
+```go
+checkout, err := client.Checkouts.Create(ctx, req,
+    opensettle.WithIdempotencyKey("order:" + order.ID),
+)
+```
+
 ## Typed errors
 
 ```go
@@ -146,7 +196,7 @@ client, err := opensettle.NewClient(apiKey, workspaceID,
 )
 ```
 
-Retries cover 5xx + 429 + transport errors with exponential backoff capped at 4 s. The SDK respects `Retry-After` (both delta-seconds and HTTP-date forms). Idempotency keys are automatically attached to money-adjacent writes and shared across retry attempts.
+Retries cover 5xx + 429 + transport errors with exponential backoff capped at 4 s. The SDK respects `Retry-After` (both delta-seconds and HTTP-date forms). Idempotency keys are automatically attached to money-adjacent writes and shared across retry attempts — supply [`WithIdempotencyKey`](#idempotency-keys) if you want to provide your own.
 
 ## Versioning
 

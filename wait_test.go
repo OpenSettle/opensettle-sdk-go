@@ -3,6 +3,7 @@ package opensettle
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -143,6 +144,52 @@ func TestWaitFor_RespectsContextCancellation(t *testing.T) {
 			},
 		},
 	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestWaitTimeoutError_Error(t *testing.T) {
+	e := &WaitTimeoutError{ResourceID: "pay_42", Timeout: 90 * time.Second}
+	msg := e.Error()
+	if !strings.Contains(msg, "pay_42") {
+		t.Fatalf("error missing resource id: %q", msg)
+	}
+	if !strings.Contains(msg, "1m30s") && !strings.Contains(msg, "90s") {
+		t.Fatalf("error missing timeout: %q", msg)
+	}
+	if !strings.Contains(msg, "opensettle:") {
+		t.Fatalf("error missing package prefix: %q", msg)
+	}
+}
+
+func TestContextSleep_FiresTimer(t *testing.T) {
+	start := time.Now()
+	err := contextSleep(bgCtx(), 30*time.Millisecond)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 25*time.Millisecond {
+		t.Fatalf("returned too early: %v", elapsed)
+	}
+}
+
+func TestContextSleep_RespectsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(bgCtx())
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		cancel()
+	}()
+	err := contextSleep(ctx, 10*time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestContextSleep_RespectsAlreadyCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(bgCtx())
+	cancel()
+	err := contextSleep(ctx, 1*time.Second)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}

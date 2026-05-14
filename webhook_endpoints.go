@@ -26,6 +26,8 @@ func (r *WebhookEndpointsResource) List(ctx context.Context) ([]WebhookEndpoint,
 	return out.Data, nil
 }
 
+// Retrieve fetches a single webhook endpoint by ID. The signing secret
+// is never returned here — only Create and RotateSecret produce it.
 func (r *WebhookEndpointsResource) Retrieve(ctx context.Context, endpointID string) (*WebhookEndpoint, error) {
 	var w endpointWrapper
 	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID), requestOptions{}, &w)
@@ -38,19 +40,27 @@ func (r *WebhookEndpointsResource) Retrieve(ctx context.Context, endpointID stri
 // Create makes a new endpoint. The response includes the plaintext
 // signing secret exactly once — store it immediately. Multi-key
 // envelope {endpoint, signingSecret} preserved.
-func (r *WebhookEndpointsResource) Create(ctx context.Context, input CreateWebhookEndpointRequest) (*CreateWebhookEndpointResponse, error) {
-	out := &CreateWebhookEndpointResponse{}
-	err := r.http.request(ctx, "/webhook_endpoints", requestOptions{
+//
+// Auto-attaches an Idempotency-Key; supply [WithIdempotencyKey] to
+// override.
+func (r *WebhookEndpointsResource) Create(ctx context.Context, input CreateWebhookEndpointRequest, opts ...RequestOption) (*CreateWebhookEndpointResponse, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}
+	cfg.applyTo(&reqOpts)
+	out := &CreateWebhookEndpointResponse{}
+	err := r.http.request(ctx, "/webhook_endpoints", reqOpts, out)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
+// Update patches a webhook endpoint. Fields left nil on input are
+// unchanged. A non-nil Events replaces the allow-list entirely.
 func (r *WebhookEndpointsResource) Update(ctx context.Context, endpointID string, input UpdateWebhookEndpointRequest) (*WebhookEndpoint, error) {
 	var w endpointWrapper
 	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID), requestOptions{
@@ -63,6 +73,9 @@ func (r *WebhookEndpointsResource) Update(ctx context.Context, endpointID string
 	return w.Endpoint, nil
 }
 
+// Delete permanently removes a webhook endpoint. In-flight retries are
+// dropped; consider Update with Status=disabled instead if you want to
+// pause without losing the configuration.
 func (r *WebhookEndpointsResource) Delete(ctx context.Context, endpointID string) error {
 	return r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID), requestOptions{
 		method: http.MethodDelete,
@@ -72,14 +85,18 @@ func (r *WebhookEndpointsResource) Delete(ctx context.Context, endpointID string
 // RotateSecret rotates the signing secret. Returns the same
 // {endpoint, signingSecret} envelope as Create — store SigningSecret
 // immediately. Step-up auth (AAL=2) required; API-key callers receive
-// *StepUpRequiredError.
-func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID string, input RotateWebhookSecretRequest) (*CreateWebhookEndpointResponse, error) {
-	out := &CreateWebhookEndpointResponse{}
-	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID)+"/rotate", requestOptions{
+// *StepUpRequiredError. Auto-attaches an Idempotency-Key; supply
+// [WithIdempotencyKey] to override.
+func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID string, input RotateWebhookSecretRequest, opts ...RequestOption) (*CreateWebhookEndpointResponse, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}
+	cfg.applyTo(&reqOpts)
+	out := &CreateWebhookEndpointResponse{}
+	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID)+"/rotate", reqOpts, out)
 	if err != nil {
 		return nil, err
 	}

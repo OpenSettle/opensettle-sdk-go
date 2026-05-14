@@ -9,6 +9,52 @@ import (
 	"time"
 )
 
+func TestBuildURL_BogusBaseReturnsInvalidRequestError(t *testing.T) {
+	h := &httpClient{
+		// Unparseable URL (malformed IPv6 bracket plus a control byte).
+		baseURL:     "http://[::1\x7f",
+		workspaceID: "ws_test",
+	}
+	_, err := h.buildURL("/customers", nil, false)
+	if err == nil {
+		t.Fatal("expected an error for a malformed base URL")
+	}
+	var ire *InvalidRequestError
+	if !errors.As(err, &ire) {
+		t.Fatalf("expected *InvalidRequestError, got %T: %v", err, err)
+	}
+	if ire.Code != CodeInvalidRequest {
+		t.Fatalf("code: %s", ire.Code)
+	}
+	if !strings.Contains(ire.Message, "invalid url") {
+		t.Fatalf("message: %q", ire.Message)
+	}
+}
+
+func TestBuildURL_PrependsLeadingSlashOnPath(t *testing.T) {
+	h := &httpClient{baseURL: "https://api.example.com", workspaceID: "ws_a"}
+	got, err := h.buildURL("customers", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://api.example.com/v1/workspaces/ws_a/customers"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestBuildURL_NoWorkspaceSkipsPrefix(t *testing.T) {
+	h := &httpClient{baseURL: "https://api.example.com", workspaceID: "ws_a"}
+	got, err := h.buildURL("/health", nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://api.example.com/health"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestHTTP_AuthorizationHeader(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()

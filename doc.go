@@ -34,6 +34,43 @@
 //	    return err
 //	}
 //
+// # Pagination
+//
+// Every List endpoint has a sibling ListIter that returns an [Iter]
+// walking every page transparently:
+//
+//	it := client.Customers.ListIter(ctx, &opensettle.ListCustomersQuery{Status: opensettle.CustomerActive})
+//	for it.Next() {
+//	    fmt.Println(it.Item().ID)
+//	}
+//	if err := it.Err(); err != nil { … }
+//
+// # Polling
+//
+// [WaitFor] is a polling helper for scripts and CI; production code should
+// prefer webhooks. It calls retrieve every opts.Interval until the until
+// predicate succeeds, then returns the resource:
+//
+//	pmt, err := opensettle.WaitFor(ctx,
+//	    client.Payments.Retrieve, "pay_…",
+//	    func(p *opensettle.Payment) bool { return p.Status == opensettle.PaymentConfirmed },
+//	    opensettle.WaitOptions{Timeout: 2 * time.Minute, Interval: 2 * time.Second},
+//	)
+//
+// On timeout you get a [*WaitTimeoutError] that carries the
+// last-observed resource so you can inspect the partial state.
+//
+// # Idempotency keys
+//
+// Every money-adjacent write (Create, Refund, RotateSecret, …) auto-attaches
+// an Idempotency-Key that is preserved across retry attempts. Pass
+// [WithIdempotencyKey] to use a caller-chosen key when you have a natural
+// deterministic id (e.g. your DB row id):
+//
+//	checkout, err := client.Checkouts.Create(ctx, req,
+//	    opensettle.WithIdempotencyKey("order:" + order.ID),
+//	)
+//
 // # Webhooks
 //
 // Webhook signature verification lives in the sub-package

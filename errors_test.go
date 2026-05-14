@@ -6,6 +6,51 @@ import (
 	"testing"
 )
 
+func TestAllErrorSubtypes_UnwrapToOpenSettleError(t *testing.T) {
+	base := &OpenSettleError{Code: CodeInternalError, Message: "test", Status: 500}
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"InvalidRequest", &InvalidRequestError{base}},
+		{"InvalidStateTransition", &InvalidStateTransitionError{base}},
+		{"Authentication", &AuthenticationError{base}},
+		{"Forbidden", &ForbiddenError{base}},
+		{"NotFound", &NotFoundError{base}},
+		{"Conflict", &ConflictError{base}},
+		{"RateLimit", &RateLimitError{OpenSettleError: base, RetryAfter: 5}},
+		{"Settlement", &SettlementError{base}},
+		{"StepUpRequired", &StepUpRequiredError{base}},
+		{"API", &APIError{base}},
+		{"Network", &NetworkError{base}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Direct Unwrap must return the embedded base.
+			unwrapped := errors.Unwrap(tc.err)
+			if unwrapped == nil {
+				t.Fatalf("%s: errors.Unwrap returned nil", tc.name)
+			}
+			var got *OpenSettleError
+			if !errors.As(unwrapped, &got) {
+				t.Fatalf("%s: unwrapped err is not *OpenSettleError: %T", tc.name, unwrapped)
+			}
+			if got != base {
+				t.Fatalf("%s: unwrapped pointer mismatch", tc.name)
+			}
+			// errors.As walking through subtype → base must succeed.
+			var asBase *OpenSettleError
+			if !errors.As(tc.err, &asBase) {
+				t.Fatalf("%s: errors.As to *OpenSettleError failed", tc.name)
+			}
+			// IsOpenSettleError convenience must match.
+			if !IsOpenSettleError(tc.err) {
+				t.Fatalf("%s: IsOpenSettleError returned false", tc.name)
+			}
+		})
+	}
+}
+
 func TestFromEnvelope_InvalidRequest(t *testing.T) {
 	err := FromEnvelope([]byte(`{"error":{"code":"invalid_request","message":"bad","param":"email","request_id":"req_1"}}`), 400, 0)
 	var target *InvalidRequestError

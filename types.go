@@ -1,10 +1,14 @@
 package opensettle
 
-import "encoding/json"
-
-// ChainId is a supported settlement chain. Mirrors `ChainId` in
+// ChainID is a supported settlement chain. Mirrors `ChainId` in
 // `@opensettle/shared/schemas/wallet`.
-type ChainId string
+type ChainID string
+
+// ChainId is the original (pre-Go-idiomatic) name for ChainID. Kept as a
+// type alias for backward compatibility; new code should prefer ChainID.
+//
+// Deprecated: use [ChainID] instead.
+type ChainId = ChainID
 
 const (
 	ChainBase     ChainId = "base"
@@ -39,6 +43,9 @@ type Metadata map[string]any
 
 // --- Customer ---------------------------------------------------------
 
+// CustomerStatus is the derived health bucket OpenSettle assigns based on
+// recent payment + subscription activity. It is not directly settable;
+// the platform updates it as a side effect of billing events.
 type CustomerStatus string
 
 const (
@@ -47,6 +54,11 @@ const (
 	CustomerChurned CustomerStatus = "churned"
 )
 
+// Customer is a merchant's customer record. Email and Name are stored
+// encrypted at rest; the API returns the decrypted view on Retrieve.
+// ActiveSubscriptions and LifetimeValue are server-computed rollups.
+// DeletedAt is set when the row is soft-deleted; reads still return it
+// for audit purposes.
 type Customer struct {
 	ID                  string         `json:"id"`
 	WorkspaceID         string         `json:"workspaceId"`
@@ -62,6 +74,9 @@ type Customer struct {
 	DeletedAt           *string        `json:"deletedAt"`
 }
 
+// CreateCustomerRequest is the body for POST /customers. Email is the
+// only required field; Wallet (when present) is validated against the
+// workspace's enabled chains on the server.
 type CreateCustomerRequest struct {
 	Email    string   `json:"email"`
 	Name     string   `json:"name,omitempty"`
@@ -70,6 +85,10 @@ type CreateCustomerRequest struct {
 	Metadata Metadata `json:"metadata,omitempty"`
 }
 
+// UpdateCustomerRequest is the body for PATCH /customers/<id>. Fields are
+// PATCH-style: omit a field (leave the pointer nil) to leave the existing
+// value unchanged. To clear a string field, pass a pointer to the empty
+// string.
 type UpdateCustomerRequest struct {
 	Name     *string  `json:"name,omitempty"`
 	Wallet   *string  `json:"wallet,omitempty"`
@@ -77,6 +96,9 @@ type UpdateCustomerRequest struct {
 	Metadata Metadata `json:"metadata,omitempty"`
 }
 
+// ListCustomersQuery filters GET /customers. Q is a free-text search over
+// email + name. Status filters by derived health bucket; leave empty for
+// all. Cursor + Limit drive pagination (Limit max 100).
 type ListCustomersQuery struct {
 	Status CustomerStatus
 	Q      string
@@ -86,6 +108,9 @@ type ListCustomersQuery struct {
 
 // --- Product / Price --------------------------------------------------
 
+// PriceInterval is the billing cadence of a Price. "one_time" is a
+// non-recurring price suitable for invoices and single-payment checkouts;
+// the others are recurring intervals consumed by subscriptions.
 type PriceInterval string
 
 const (
@@ -95,6 +120,9 @@ const (
 	PriceYear    PriceInterval = "year"
 )
 
+// Product is a sellable item in the workspace catalog. Active=false hides
+// it from new checkouts but does not affect subscriptions already using
+// its prices.
 type Product struct {
 	ID          string   `json:"id"`
 	WorkspaceID string   `json:"workspaceId"`
@@ -105,6 +133,9 @@ type Product struct {
 	CreatedAt   string   `json:"createdAt"`
 }
 
+// Price is a (product, amount, interval) tuple. Amount is in minor units
+// (e.g. cents). Currency is the fiat denomination (USD, EUR, …); the chain
+// + token used to settle are chosen per-charge, not on the price.
 type Price struct {
 	ID          string        `json:"id"`
 	WorkspaceID string        `json:"workspaceId"`
@@ -117,12 +148,17 @@ type Price struct {
 	CreatedAt   string        `json:"createdAt"`
 }
 
+// CreateProductRequest is the body for POST /products.
 type CreateProductRequest struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
 	Metadata    Metadata `json:"metadata,omitempty"`
 }
 
+// UpdateProductRequest is the body for PATCH /products/<id>. Fields are
+// PATCH-style: omit a field (leave the pointer nil) to leave the existing
+// value unchanged. Setting Active=false hides the product from new
+// checkouts.
 type UpdateProductRequest struct {
 	Name        *string  `json:"name,omitempty"`
 	Description *string  `json:"description,omitempty"`
@@ -130,6 +166,9 @@ type UpdateProductRequest struct {
 	Metadata    Metadata `json:"metadata,omitempty"`
 }
 
+// CreatePriceRequest is the body for POST /products/<id>/prices. Amount
+// is required and in minor units (e.g. cents). Currency defaults to the
+// workspace's default fiat when empty.
 type CreatePriceRequest struct {
 	Amount   int           `json:"amount"`
 	Currency string        `json:"currency,omitempty"`
@@ -137,6 +176,9 @@ type CreatePriceRequest struct {
 	Metadata Metadata      `json:"metadata,omitempty"`
 }
 
+// ListProductsQuery filters GET /products. Active is a tri-state pointer:
+// nil = both active and inactive, &true = active only, &false = inactive
+// only.
 type ListProductsQuery struct {
 	Cursor string
 	Limit  int
@@ -145,6 +187,9 @@ type ListProductsQuery struct {
 
 // --- Invoice ----------------------------------------------------------
 
+// InvoiceStatus is the lifecycle state of an invoice. draft is the only
+// editable state; open is sent-but-unpaid; paid and void are terminal;
+// past_due is open + past DueAt.
 type InvoiceStatus string
 
 const (
@@ -155,12 +200,18 @@ const (
 	InvoiceVoid    InvoiceStatus = "void"
 )
 
+// LineItem is a single row on an invoice. UnitAmountMinor is in minor
+// units (e.g. cents); the line total is Quantity * UnitAmountMinor.
 type LineItem struct {
 	Description     string `json:"description"`
 	Quantity        int    `json:"quantity"`
 	UnitAmountMinor int    `json:"unitAmountMinor"`
 }
 
+// Invoice is a billable document. AmountMinor is in minor units of
+// Currency (fiat). Chain + Token specify how the customer will settle on
+// chain. HostedURL is the buyer-facing page the customer pays from.
+// PaymentID is set once a payment confirms.
 type Invoice struct {
 	ID             string        `json:"id"`
 	WorkspaceID    string        `json:"workspaceId"`
@@ -184,6 +235,10 @@ type Invoice struct {
 	CreatedAt      string        `json:"createdAt"`
 }
 
+// CreateInvoiceRequest is the body for POST /invoices. DueInDays is an
+// integer offset from the server clock; the API converts it to DueAt.
+// SubscriptionID is set automatically for subscription-generated invoices
+// and should normally be left empty by callers.
 type CreateInvoiceRequest struct {
 	CustomerID     string      `json:"customerId"`
 	Chain          ChainId     `json:"chain"`
@@ -196,6 +251,9 @@ type CreateInvoiceRequest struct {
 	Metadata       Metadata    `json:"metadata,omitempty"`
 }
 
+// ListInvoicesQuery filters GET /invoices. CustomerID narrows to one
+// customer; Status filters by lifecycle bucket. Cursor + Limit drive
+// pagination.
 type ListInvoicesQuery struct {
 	Cursor     string
 	Limit      int
@@ -205,6 +263,11 @@ type ListInvoicesQuery struct {
 
 // --- Payment ----------------------------------------------------------
 
+// PaymentStatus is the on-chain lifecycle of a payment. pending means
+// broadcast-but-unconfirmed; confirmed has met the workspace's required
+// confirmation depth; refunded means a refund tx has confirmed; reorged
+// means a previously-confirmed payment was rolled back by a chain
+// reorganization.
 type PaymentStatus string
 
 const (
@@ -215,6 +278,11 @@ const (
 	PaymentReorged   PaymentStatus = "reorged"
 )
 
+// Payment is a single on-chain settlement attempt. AmountMinor, FeeMinor,
+// and NetMinor are denominated in minor units of Currency (fiat); the
+// on-chain settlement value is in Token base units, derived at quote
+// time. TxHash is set once the customer broadcasts. Refund fields are
+// populated only after Refund + RefundBroadcast are called.
 type Payment struct {
 	ID                string        `json:"id"`
 	WorkspaceID       string        `json:"workspaceId"`
@@ -243,13 +311,22 @@ type Payment struct {
 	ConfirmedAt       *string       `json:"confirmedAt"`
 }
 
+// InitiateRefundRequest is the body for POST /payments/<id>/refund.
+// AmountMinor omitted (zero) means refund the full remaining amount.
+// RecipientAddress overrides the default refund destination (the
+// original payer); the server validates it against the payment's chain.
 type InitiateRefundRequest struct {
 	AmountMinor      int    `json:"amountMinor,omitempty"`
 	Reason           string `json:"reason,omitempty"`
 	RecipientAddress string `json:"recipientAddress,omitempty"`
 }
 
-type UnsignedEvmTx struct {
+// UnsignedEVMTx is the EVM-shaped portion of an unsigned refund payload.
+// Value is the native-currency wei value (typically "0" for ERC-20
+// transfers); AmountBaseUnits is the token amount in its smallest unit
+// (e.g. 6-decimal USDC). The merchant signs this with their wallet and
+// broadcasts; OpenSettle never holds keys.
+type UnsignedEVMTx struct {
 	To              string `json:"to"`
 	Data            string `json:"data"`
 	Value           string `json:"value"`
@@ -259,6 +336,17 @@ type UnsignedEvmTx struct {
 	AmountBaseUnits string `json:"amountBaseUnits"`
 }
 
+// UnsignedEvmTx is the pre-Go-idiomatic name for [UnsignedEVMTx]. Kept as
+// a type alias for backward compatibility; new code should prefer
+// UnsignedEVMTx.
+//
+// Deprecated: use [UnsignedEVMTx] instead.
+type UnsignedEvmTx = UnsignedEVMTx
+
+// UnsignedTxEnvelope wraps a chain-agnostic refund description plus an
+// optional chain-specific payload (today: EVM). Instructions is a
+// human-readable hint for wallet UIs. AmountMinor is in fiat minor units;
+// the chain-specific block carries the token-base-unit amount.
 type UnsignedTxEnvelope struct {
 	Chain        ChainId        `json:"chain"`
 	Token        TokenSymbol    `json:"token"`
@@ -269,15 +357,25 @@ type UnsignedTxEnvelope struct {
 	EVM          *UnsignedEvmTx `json:"evm,omitempty"`
 }
 
+// InitiateRefundResponse is the multi-key envelope returned by
+// POST /payments/<id>/refund. The Payment is in status refund_pending;
+// the UnsignedTx must be signed by the merchant wallet and broadcast,
+// then reported back via RefundBroadcast.
 type InitiateRefundResponse struct {
 	Payment    Payment            `json:"payment"`
 	UnsignedTx UnsignedTxEnvelope `json:"unsignedTx"`
 }
 
+// RecordRefundBroadcastRequest is the body for
+// POST /payments/<id>/refund/broadcast. The caller supplies the tx hash
+// returned by their wallet after broadcasting the unsigned refund tx.
 type RecordRefundBroadcastRequest struct {
 	RefundTxHash string `json:"refundTxHash"`
 }
 
+// ListPaymentsQuery filters GET /payments. CustomerID narrows to one
+// customer; Status filters by on-chain lifecycle bucket. Cursor + Limit
+// drive pagination.
 type ListPaymentsQuery struct {
 	Cursor     string
 	Limit      int
@@ -287,6 +385,9 @@ type ListPaymentsQuery struct {
 
 // --- Subscription -----------------------------------------------------
 
+// SubscriptionStatus is the lifecycle bucket of a subscription. trialing
+// is pre-billing; active is current; past_due is one or more failed
+// renewals; paused stops billing without canceling; canceled is terminal.
 type SubscriptionStatus string
 
 const (
@@ -297,6 +398,10 @@ const (
 	SubCanceled SubscriptionStatus = "canceled"
 )
 
+// AutopayMode controls how a subscription's renewal charge is collected.
+// allowance uses an ERC-20 spend approval against the merchant's
+// collector; smart-wallet uses a session-key-style preauthorization;
+// manual prompts the customer to sign each renewal in their wallet.
 type AutopayMode string
 
 const (
@@ -305,6 +410,11 @@ const (
 	AutopayManual      AutopayMode = "manual"
 )
 
+// Subscription is a recurring billing arrangement. AmountMinor is in
+// minor units of Currency (fiat); MRRMinor is the normalized monthly
+// recurring revenue contribution. AllowanceTx/AllowanceRemaining are
+// populated only when Autopay=allowance. CurrentPeriodEnd and
+// NextBillingDate are server-managed.
 type Subscription struct {
 	ID                 string             `json:"id"`
 	WorkspaceID        string             `json:"workspaceId"`
@@ -331,6 +441,9 @@ type Subscription struct {
 	CreatedAt          string             `json:"createdAt"`
 }
 
+// CreateSubscriptionRequest is the body for POST /subscriptions. Autopay
+// defaults to manual when empty. TrialDays > 0 starts the subscription
+// in trialing status; the first charge fires at trial end.
 type CreateSubscriptionRequest struct {
 	CustomerID string      `json:"customerId"`
 	PriceID    string      `json:"priceId"`
@@ -349,6 +462,9 @@ const (
 	ProrationAtPeriodEnd ProrationMode = "at_period_end"
 )
 
+// ChangePlanRequest is the body for POST /subscriptions/<id>/change_plan.
+// ProrationMode controls when the swap takes effect; default is
+// immediately when empty.
 type ChangePlanRequest struct {
 	PriceID       string        `json:"priceId"`
 	ProrationMode ProrationMode `json:"prorationMode,omitempty"`
@@ -363,11 +479,17 @@ const (
 	CancelAtPeriodEnd CancelMode = "at_period_end"
 )
 
+// CancelSubscriptionRequest is the body for POST /subscriptions/<id>/cancel.
+// Reason is recorded on the audit log. Mode defaults to at_period_end
+// when empty.
 type CancelSubscriptionRequest struct {
 	Reason string     `json:"reason,omitempty"`
 	Mode   CancelMode `json:"mode,omitempty"`
 }
 
+// ListSubscriptionsQuery filters GET /subscriptions. CustomerID narrows
+// to one customer; Status filters by lifecycle bucket. Cursor + Limit
+// drive pagination.
 type ListSubscriptionsQuery struct {
 	Cursor     string
 	Limit      int
@@ -377,6 +499,9 @@ type ListSubscriptionsQuery struct {
 
 // --- Checkout ---------------------------------------------------------
 
+// CheckoutMode selects what a hosted checkout session does. "payment" is
+// a one-shot charge (typically attached to an invoice); "subscription"
+// creates a recurring Subscription on successful completion.
 type CheckoutMode string
 
 const (
@@ -384,6 +509,10 @@ const (
 	CheckoutSubscription CheckoutMode = "subscription"
 )
 
+// CheckoutStatus is the lifecycle bucket of a hosted checkout session.
+// open is awaiting buyer; pending is buyer signed and broadcast,
+// awaiting chain confirmation; succeeded, failed, and expired are
+// terminal.
 type CheckoutStatus string
 
 const (
@@ -394,6 +523,10 @@ const (
 	CheckoutExpired   CheckoutStatus = "expired"
 )
 
+// Checkout is a hosted payment session. HostedURL is the relative path
+// (e.g. "/checkout/<token>") to redirect the buyer to; concatenate with
+// the OpenSettle web origin. AmountMinor + Currency are populated once
+// the underlying invoice/price is resolved.
 type Checkout struct {
 	ID          string         `json:"id"`
 	WorkspaceID string         `json:"workspaceId"`
@@ -419,6 +552,12 @@ type Checkout struct {
 	HostedURL string `json:"hostedUrl"`
 }
 
+// CreateCheckoutRequest is the body for POST /checkouts. Exactly one of
+// (CustomerID) or (CustomerEmail [+ CustomerName]) should be supplied —
+// the latter form auto-creates a Customer on the fly. For Mode=payment
+// pass InvoiceID; for Mode=subscription pass PriceID. Chain/Token are
+// optional pre-selections; if omitted, the buyer picks on the hosted
+// page.
 type CreateCheckoutRequest struct {
 	Mode             CheckoutMode `json:"mode"`
 	CustomerID       string       `json:"customerId,omitempty"`
@@ -436,6 +575,9 @@ type CreateCheckoutRequest struct {
 
 // --- Webhook endpoint -------------------------------------------------
 
+// WebhookEndpointStatus is the delivery state of a webhook endpoint.
+// disabled stops new deliveries (existing in-flight retries still run);
+// enabled is the normal state.
 type WebhookEndpointStatus string
 
 const (
@@ -443,6 +585,11 @@ const (
 	WebhookDisabled WebhookEndpointStatus = "disabled"
 )
 
+// WebhookEndpoint is a merchant-configured HTTPS destination for event
+// deliveries. SuccessRate is the server-computed rolling success ratio
+// over the recent delivery window. RotationGraceUntil is set during a
+// signing-secret rotation: until then, both the old and new secrets
+// produce valid signatures.
 type WebhookEndpoint struct {
 	ID                 string                `json:"id"`
 	WorkspaceID        string                `json:"workspaceId"`
@@ -455,17 +602,28 @@ type WebhookEndpoint struct {
 	CreatedAt          string                `json:"createdAt"`
 }
 
+// CreateWebhookEndpointRequest is the body for POST /webhook_endpoints.
+// Events is an allow-list of event-type names (e.g. "payment.confirmed");
+// omit or pass an empty slice to subscribe to all events.
 type CreateWebhookEndpointRequest struct {
 	URL         string   `json:"url"`
 	Description string   `json:"description,omitempty"`
 	Events      []string `json:"events,omitempty"`
 }
 
+// CreateWebhookEndpointResponse is the multi-key envelope returned by
+// POST /webhook_endpoints (and by /rotate). SigningSecret is the plaintext
+// HMAC secret returned exactly once — store it immediately; subsequent
+// reads only return the endpoint metadata.
 type CreateWebhookEndpointResponse struct {
 	Endpoint      WebhookEndpoint `json:"endpoint"`
 	SigningSecret string          `json:"signingSecret"`
 }
 
+// UpdateWebhookEndpointRequest is the body for PATCH /webhook_endpoints/<id>.
+// Fields are PATCH-style: omit a field (leave the pointer nil) to leave
+// the existing value unchanged. Passing a non-nil Events replaces the
+// allow-list entirely.
 type UpdateWebhookEndpointRequest struct {
 	URL         *string                `json:"url,omitempty"`
 	Description *string                `json:"description,omitempty"`
@@ -473,6 +631,9 @@ type UpdateWebhookEndpointRequest struct {
 	Status      *WebhookEndpointStatus `json:"status,omitempty"`
 }
 
+// RotateWebhookSecretRequest is the body for POST /webhook_endpoints/<id>/rotate.
+// GraceSeconds is the dual-signing window during which both old and new
+// secrets produce valid signatures; default is server-side when zero.
 type RotateWebhookSecretRequest struct {
 	GraceSeconds int `json:"graceSeconds,omitempty"`
 }
@@ -485,10 +646,17 @@ type RotateWebhookSecretRequest struct {
 // will be removed in a future release.
 type RotateWebhookSecretResponse = CreateWebhookEndpointResponse
 
+// TestWebhookEndpointRequest is the body for POST /webhook_endpoints/<id>/test.
+// EventType is the event-type name to fire as a sample (e.g.
+// "payment.confirmed"); the payload is server-generated.
 type TestWebhookEndpointRequest struct {
 	EventType string `json:"eventType"`
 }
 
+// TestWebhookEndpointResponse reports the result of a synchronous test
+// delivery. Status is the HTTP status the endpoint returned to
+// OpenSettle; LatencyMs is the round-trip latency observed by the
+// dispatcher. OK is true when Status was 2xx.
 type TestWebhookEndpointResponse struct {
 	OK        bool `json:"ok"`
 	Status    int  `json:"status"`
@@ -501,7 +669,3 @@ type TestWebhookEndpointResponse struct {
 type rawList[T any] struct {
 	Data []T `json:"data"`
 }
-
-// jsonRawShim helps tests assert the JSON the SDK sent. Not used by
-// production code.
-var _ = json.RawMessage(nil)

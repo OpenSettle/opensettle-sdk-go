@@ -6,24 +6,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Major versions track the HTTP API major version (`v1`).
 
-## [0.4.0] - 2026-05-15
+## [0.5.0] - 2026-05-15
+
+### Added
+
+- **`WithIdempotencyKey(key string)`** — public per-call option that lets
+  callers supply their own Idempotency-Key on any money-adjacent write
+  (`Checkouts.Create`, `Customers.Create`, `Invoices.Create/Send/Remind`,
+  `Payments.Refund/RefundBroadcast`, `Products.Create/CreatePrice`,
+  `Subscriptions.Create/ChangePlan`, `WebhookEndpoints.Create/RotateSecret`).
+  Useful when you have a natural deterministic id (e.g. your DB row id):
+
+      client.Checkouts.Create(ctx, req, opensettle.WithIdempotencyKey("order:42"))
+
+  When omitted, the SDK continues to auto-generate a UUIDv4 key as before.
+  Keys are preserved across retry attempts in both modes.
+
+- **`Iter[T]` is now stack-safe across arbitrarily long streams of empty
+  pages.** Previously `Iter.Next()` self-recursed; now loops internally.
+  Public API unchanged.
+
+- **`ChainID` type** (alias-compatible with the legacy `ChainId` name) —
+  Go convention uses all-caps initialisms. `ChainId` is preserved as a
+  deprecated type alias (`type ChainId = ChainID`); existing code keeps
+  compiling with no diff.
+
+- Extensive new tests: every error subtype's `Unwrap()` is now covered by
+  a table test, `WithIdempotencyKey` has parity coverage across all 12
+  write methods plus a retry-key-preservation test, `Payments.ListIter`
+  and `Invoices.ListIter` paths are covered, and `buildURL`'s failure path
+  is exercised directly. Coverage rose from 85.3% → 90%+.
+
+- New `example_test.go` provides runnable Examples for `NewClient`,
+  `Checkouts.Create`, `Customers.ListIter`, `WaitFor`, `WithIdempotencyKey`,
+  and the typed-error switch pattern. These render on pkg.go.dev.
+
+- Comprehensive godoc on every exported type, request/response struct,
+  enum const, and resource method — pkg.go.dev now has a full description
+  on every symbol.
 
 ### Fixed
 
 - **`Checkout` struct now matches the API response shape.** Three drifts
   resolved:
   - Added `Description *string` field (server returns it; was previously
-    silently dropped during JSON decode).
+    silently dropped during JSON decode). Note: this re-adds the field
+    that 0.3.0 removed — the API does return `description` and the 0.3.0
+    note was based on stale schema reads. See 0.3.0 entry below.
   - Added `HostedURL string` field (relative URL path for the buyer-facing
     hosted checkout; concatenate with the web origin to redirect).
   - Removed `UpdatedAt string` field (the API never returns this; readers
     would always see `""`).
+
+- `generateIdempotencyKey` fallback path (crypto/rand failure) is now
+  collision-safe under concurrent calls: appends an atomic counter to the
+  nanosecond timestamp.
+
+- Replaced hand-rolled query-string sort with `sort.Strings` from stdlib.
 
 ### Breaking
 
 - Code that reads `checkout.UpdatedAt` no longer compiles. Replace with a
   derived timestamp from your own store, or use `checkout.CreatedAt` /
   `checkout.CompletedAt` if those fit your use case.
+
+### Deprecated
+
+- `ChainId` (lowercase d) is deprecated in favor of `ChainID`. The alias
+  keeps existing code compiling; new code should prefer `ChainID`. The
+  alias will remain until at least 1.0.
 
 ## [0.3.0] - 2026-05-12
 
@@ -47,10 +98,9 @@ Major versions track the HTTP API major version (`v1`).
 
 ### Fixed
 
-- **`Checkout.Description` field removed** — the underlying API schema
-  doesn't have this field; it was a hallucinated leftover. Pre-existing
-  code that read `chk.Description` will get a build error and should
-  be updated to drop the reference.
+- **`Checkout.Description` field removed.** *(See 0.4.0 — re-added once
+  the actual API schema was re-verified; this removal was a false-positive
+  driven by a stale schema read. Apologies for the churn.)*
 
 ## [0.2.0] - 2026-05-12
 

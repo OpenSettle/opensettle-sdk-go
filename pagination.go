@@ -39,22 +39,21 @@ func (it *Iter[T]) Next() bool {
 			return false
 		}
 	}
-	// Drain the current page first.
-	if it.pos < len(it.page.Data) {
-		it.item = &it.page.Data[it.pos]
-		it.pos++
-		return true
+	// Loop so a stream of empty intermediate pages can't recurse and blow the stack.
+	for {
+		if it.pos < len(it.page.Data) {
+			it.item = &it.page.Data[it.pos]
+			it.pos++
+			return true
+		}
+		if !it.page.HasMore || it.page.NextCursor == "" {
+			it.done = true
+			return false
+		}
+		if !it.advancePage(it.page.NextCursor) {
+			return false
+		}
 	}
-	// Need another page?
-	if !it.page.HasMore || it.page.NextCursor == "" {
-		it.done = true
-		return false
-	}
-	if !it.advancePage(it.page.NextCursor) {
-		return false
-	}
-	// Recurse to handle empty intermediate pages cleanly.
-	return it.Next()
 }
 
 // Item returns the most-recently-yielded item. Only valid after Next

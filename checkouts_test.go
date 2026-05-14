@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const checkoutJSON = `{"id":"co_1","workspaceId":"ws","mode":"payment","status":"open","customerId":"cu_1","invoiceId":"in_1","priceId":null,"amountMinor":1000,"currency":"USD","chain":"base","token":"USDC","description":null,"successUrl":"https://example/ok","cancelUrl":null,"expiresAt":"2026-05-12T16:00:00.000Z","completedAt":null,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z","updatedAt":"2026-05-12T15:00:00.000Z"}`
+const checkoutJSON = `{"id":"co_1","workspaceId":"ws","mode":"payment","status":"open","customerId":"cu_1","invoiceId":"in_1","priceId":null,"amountMinor":1000,"currency":"USD","chain":"base","token":"USDC","description":null,"successUrl":"https://example/ok","cancelUrl":null,"expiresAt":"2026-05-12T16:00:00.000Z","completedAt":null,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z","hostedUrl":"/checkout/abc123"}`
 const checkoutWrappedJSON = `{"checkout":` + checkoutJSON + `}`
 
 func TestCheckouts_Create_HappyPath(t *testing.T) {
@@ -29,6 +29,9 @@ func TestCheckouts_Create_HappyPath(t *testing.T) {
 	}
 	if out.Status != CheckoutOpen {
 		t.Fatalf("status: %s", out.Status)
+	}
+	if out.HostedURL != "/checkout/abc123" {
+		t.Fatalf("hostedUrl: %q", out.HostedURL)
 	}
 }
 

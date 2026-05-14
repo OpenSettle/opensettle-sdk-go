@@ -11,8 +11,10 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -120,7 +122,7 @@ func encodeQuery(query map[string]any) string {
 	for k := range query {
 		keys = append(keys, k)
 	}
-	sortStrings(keys)
+	sort.Strings(keys)
 	for _, k := range keys {
 		val := query[k]
 		if val == nil {
@@ -150,16 +152,6 @@ func encodeQuery(query map[string]any) string {
 		}
 	}
 	return v.Encode()
-}
-
-// sortStrings is a tiny in-place insertion sort used to keep query string
-// encoding deterministic without pulling in sort just for this.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j-1] > s[j]; j-- {
-			s[j-1], s[j] = s[j], s[j-1]
-		}
-	}
 }
 
 func (h *httpClient) do(ctx context.Context, fullURL string, opts requestOptions, out any) error {
@@ -205,12 +197,12 @@ func (h *httpClient) do(ctx context.Context, fullURL string, opts requestOptions
 		timeout = opts.timeoutOverride
 	}
 	retries := h.maxRetries
-	if opts.retriesOverride >= 0 && opts.retriesOverride != 0 {
+	switch {
+	case opts.retriesOverride > 0:
 		retries = opts.retriesOverride
-	}
-	if opts.retriesOverride == -1 {
-		// Sentinel for "explicitly disable retries". -1 because 0 in the
-		// struct's zero value already means "no override".
+	case opts.retriesOverride == -1:
+		// -1 is the explicit "disable retries" sentinel; 0 means
+		// "leave the client default in place".
 		retries = 0
 	}
 
@@ -355,6 +347,10 @@ func backoffFor(attempt int, retryAfterSeconds float64) time.Duration {
 	return base
 }
 
+// idempotencyFallbackCounter ensures fallback keys stay unique across
+// concurrent goroutines on the same nanosecond when crypto/rand fails.
+var idempotencyFallbackCounter uint64
+
 // generateIdempotencyKey returns a UUIDv4 string. Used when the caller
 // passes idempotencyAuto and didn't supply one of their own. No third-
 // party deps — stdlib crypto/rand + a 16-byte format-and-set.
@@ -362,9 +358,11 @@ func generateIdempotencyKey() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		// crypto/rand should never fail on a working machine; if it does
-		// we fall back to a time-derived value so retries still de-dupe.
+		// we fall back to a time-derived value with an atomic counter so
+		// concurrent callers on the same nanosecond still get unique keys.
 		t := time.Now().UnixNano()
-		return fmt.Sprintf("os_%016x", t)
+		n := atomic.AddUint64(&idempotencyFallbackCounter, 1)
+		return fmt.Sprintf("os_%016x_%016x", t, n)
 	}
 	// Per RFC 4122 — version 4, variant 10.
 	b[6] = (b[6] & 0x0f) | 0x40

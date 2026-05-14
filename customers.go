@@ -48,16 +48,20 @@ func (r *CustomersResource) Retrieve(ctx context.Context, customerID string) (*C
 	return wrapper.Customer, nil
 }
 
-// Create makes a new customer. Auto-attaches an Idempotency-Key.
-func (r *CustomersResource) Create(ctx context.Context, input CreateCustomerRequest) (*Customer, error) {
-	var wrapper struct {
-		Customer *Customer `json:"customer"`
-	}
-	err := r.http.request(ctx, "/customers", requestOptions{
+// Create makes a new customer. Auto-attaches an Idempotency-Key; supply
+// [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *CustomersResource) Create(ctx context.Context, input CreateCustomerRequest, opts ...RequestOption) (*Customer, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &wrapper)
+	}
+	cfg.applyTo(&reqOpts)
+	var wrapper struct {
+		Customer *Customer `json:"customer"`
+	}
+	err := r.http.request(ctx, "/customers", reqOpts, &wrapper)
 	if err != nil {
 		return nil, err
 	}

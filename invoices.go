@@ -15,6 +15,8 @@ type invoiceWrapper struct {
 	Invoice *Invoice `json:"invoice"`
 }
 
+// List returns one page of invoices for the workspace. Pass nil for an
+// unfiltered first page; use ListIter for cursor-driven full iteration.
 func (r *InvoicesResource) List(ctx context.Context, query *ListInvoicesQuery) (*CursorPage[Invoice], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -39,6 +41,7 @@ func (r *InvoicesResource) List(ctx context.Context, query *ListInvoicesQuery) (
 	return out, nil
 }
 
+// Retrieve fetches a single invoice by ID.
 func (r *InvoicesResource) Retrieve(ctx context.Context, invoiceID string) (*Invoice, error) {
 	var w invoiceWrapper
 	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID), requestOptions{}, &w)
@@ -48,39 +51,52 @@ func (r *InvoicesResource) Retrieve(ctx context.Context, invoiceID string) (*Inv
 	return w.Invoice, nil
 }
 
-func (r *InvoicesResource) Create(ctx context.Context, input CreateInvoiceRequest) (*Invoice, error) {
-	var w invoiceWrapper
-	err := r.http.request(ctx, "/invoices", requestOptions{
+// Create makes a new invoice. Auto-attaches an Idempotency-Key; supply
+// [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *InvoicesResource) Create(ctx context.Context, input CreateInvoiceRequest, opts ...RequestOption) (*Invoice, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w invoiceWrapper
+	err := r.http.request(ctx, "/invoices", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
 	return w.Invoice, nil
 }
 
-// Send emails the hosted invoice link to the customer.
-func (r *InvoicesResource) Send(ctx context.Context, invoiceID string) (*Invoice, error) {
-	var w invoiceWrapper
-	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/send", requestOptions{
+// Send emails the hosted invoice link to the customer. Auto-attaches an
+// Idempotency-Key; supply [WithIdempotencyKey] to override.
+func (r *InvoicesResource) Send(ctx context.Context, invoiceID string, opts ...RequestOption) (*Invoice, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w invoiceWrapper
+	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/send", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
 	return w.Invoice, nil
 }
 
-// Remind re-sends a reminder for an unpaid invoice.
-func (r *InvoicesResource) Remind(ctx context.Context, invoiceID string) (*Invoice, error) {
-	var w invoiceWrapper
-	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/reminder", requestOptions{
+// Remind re-sends a reminder for an unpaid invoice. Auto-attaches an
+// Idempotency-Key; supply [WithIdempotencyKey] to override.
+func (r *InvoicesResource) Remind(ctx context.Context, invoiceID string, opts ...RequestOption) (*Invoice, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w invoiceWrapper
+	err := r.http.request(ctx, "/invoices/"+url.PathEscape(invoiceID)+"/reminder", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,8 @@ type paymentWrapper struct {
 	Payment *Payment `json:"payment"`
 }
 
+// List returns one page of payments for the workspace. Pass nil for an
+// unfiltered first page; use ListIter for cursor-driven full iteration.
 func (r *PaymentsResource) List(ctx context.Context, query *ListPaymentsQuery) (*CursorPage[Payment], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -39,6 +41,7 @@ func (r *PaymentsResource) List(ctx context.Context, query *ListPaymentsQuery) (
 	return out, nil
 }
 
+// Retrieve fetches a single payment by ID.
 func (r *PaymentsResource) Retrieve(ctx context.Context, paymentID string) (*Payment, error) {
 	var w paymentWrapper
 	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID), requestOptions{}, &w)
@@ -55,13 +58,20 @@ func (r *PaymentsResource) Retrieve(ctx context.Context, paymentID string) (*Pay
 // Step-up auth (AAL=2) is required on this route, surfaced as
 // *StepUpRequiredError for API-key callers. Sessions get through if
 // they re-authed within freshWithinSeconds.
-func (r *PaymentsResource) Refund(ctx context.Context, paymentID string, input InitiateRefundRequest) (*InitiateRefundResponse, error) {
-	out := &InitiateRefundResponse{}
-	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID)+"/refund", requestOptions{
+//
+// Auto-attaches an Idempotency-Key; supply [WithIdempotencyKey] to use a
+// caller-chosen key (recommended for refund flows where the caller has a
+// natural deterministic id, e.g. the refund's row id in your DB).
+func (r *PaymentsResource) Refund(ctx context.Context, paymentID string, input InitiateRefundRequest, opts ...RequestOption) (*InitiateRefundResponse, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, out)
+	}
+	cfg.applyTo(&reqOpts)
+	out := &InitiateRefundResponse{}
+	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID)+"/refund", reqOpts, out)
 	if err != nil {
 		return nil, err
 	}
@@ -70,14 +80,18 @@ func (r *PaymentsResource) Refund(ctx context.Context, paymentID string, input I
 
 // RefundBroadcast tells OpenSettle the merchant has signed and
 // broadcast the refund tx. The chain reader picks it up and flips
-// status to refunded once it confirms.
-func (r *PaymentsResource) RefundBroadcast(ctx context.Context, paymentID string, input RecordRefundBroadcastRequest) (*Payment, error) {
-	var w paymentWrapper
-	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID)+"/refund/broadcast", requestOptions{
+// status to refunded once it confirms. Auto-attaches an Idempotency-Key;
+// supply [WithIdempotencyKey] to override.
+func (r *PaymentsResource) RefundBroadcast(ctx context.Context, paymentID string, input RecordRefundBroadcastRequest, opts ...RequestOption) (*Payment, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w paymentWrapper
+	err := r.http.request(ctx, "/payments/"+url.PathEscape(paymentID)+"/refund/broadcast", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}

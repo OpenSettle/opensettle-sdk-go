@@ -12,6 +12,8 @@ type ProductsResource struct {
 	http *httpClient
 }
 
+// List returns one page of products. Pass nil for an unfiltered first
+// page; use ListIter for cursor-driven full iteration.
 func (r *ProductsResource) List(ctx context.Context, query *ListProductsQuery) (*CursorPage[Product], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -33,6 +35,7 @@ func (r *ProductsResource) List(ctx context.Context, query *ListProductsQuery) (
 	return out, nil
 }
 
+// Retrieve fetches a single product by ID.
 func (r *ProductsResource) Retrieve(ctx context.Context, productID string) (*Product, error) {
 	var wrapper struct {
 		Product *Product `json:"product"`
@@ -44,21 +47,27 @@ func (r *ProductsResource) Retrieve(ctx context.Context, productID string) (*Pro
 	return wrapper.Product, nil
 }
 
-func (r *ProductsResource) Create(ctx context.Context, input CreateProductRequest) (*Product, error) {
-	var wrapper struct {
-		Product *Product `json:"product"`
-	}
-	err := r.http.request(ctx, "/products", requestOptions{
+// Create makes a new product. Auto-attaches an Idempotency-Key; supply
+// [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *ProductsResource) Create(ctx context.Context, input CreateProductRequest, opts ...RequestOption) (*Product, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &wrapper)
+	}
+	cfg.applyTo(&reqOpts)
+	var wrapper struct {
+		Product *Product `json:"product"`
+	}
+	err := r.http.request(ctx, "/products", reqOpts, &wrapper)
 	if err != nil {
 		return nil, err
 	}
 	return wrapper.Product, nil
 }
 
+// Update patches a product. Fields left nil on input are unchanged.
 func (r *ProductsResource) Update(ctx context.Context, productID string, input UpdateProductRequest) (*Product, error) {
 	var wrapper struct {
 		Product *Product `json:"product"`
@@ -91,16 +100,20 @@ func (r *ProductsResource) ListPrices(ctx context.Context, productID string) ([]
 	return out.Data, nil
 }
 
-// CreatePrice attaches a new price to a product.
-func (r *ProductsResource) CreatePrice(ctx context.Context, productID string, input CreatePriceRequest) (*Price, error) {
-	var wrapper struct {
-		Price *Price `json:"price"`
-	}
-	err := r.http.request(ctx, "/products/"+url.PathEscape(productID)+"/prices", requestOptions{
+// CreatePrice attaches a new price to a product. Auto-attaches an
+// Idempotency-Key; supply [WithIdempotencyKey] to override.
+func (r *ProductsResource) CreatePrice(ctx context.Context, productID string, input CreatePriceRequest, opts ...RequestOption) (*Price, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &wrapper)
+	}
+	cfg.applyTo(&reqOpts)
+	var wrapper struct {
+		Price *Price `json:"price"`
+	}
+	err := r.http.request(ctx, "/products/"+url.PathEscape(productID)+"/prices", reqOpts, &wrapper)
 	if err != nil {
 		return nil, err
 	}

@@ -187,3 +187,93 @@ func TestSubscriptions_ListIter_BasicShape(t *testing.T) {
 		t.Fatalf("id: %s", it.Item().ID)
 	}
 }
+
+func TestPayments_ListIter_BasicShape(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, `{"data":[`+paymentJSON+`],"nextCursor":"","hasMore":false}`)
+	it := c.Payments.ListIter(bgCtx(), nil)
+	if !it.Next() {
+		t.Fatalf("expected 1 item")
+	}
+	if it.Item().ID != "pay_1" {
+		t.Fatalf("id: %s", it.Item().ID)
+	}
+	if it.Next() {
+		t.Fatalf("expected end of iteration")
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+}
+
+func TestPayments_ListIter_FollowsNextCursor(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, `{"data":[`+paymentJSON+`],"nextCursor":"cur_2","hasMore":true}`)
+	other := strings.Replace(paymentJSON, `"id":"pay_1"`, `"id":"pay_2"`, 1)
+	s.queue(200, `{"data":[`+other+`],"nextCursor":"","hasMore":false}`)
+
+	it := c.Payments.ListIter(bgCtx(), &ListPaymentsQuery{CustomerID: "cu_1", Limit: 5})
+	ids := []string{}
+	for it.Next() {
+		ids = append(ids, it.Item().ID)
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "pay_1" || ids[1] != "pay_2" {
+		t.Fatalf("ids: %v", ids)
+	}
+	reqs := allRecorded(s)
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(reqs))
+	}
+	q1 := recordedQuery(t, reqs[1].Query)
+	if q1.Get("cursor") != "cur_2" {
+		t.Fatalf("cursor on 2nd: %q", q1.Get("cursor"))
+	}
+	if q1.Get("customerId") != "cu_1" {
+		t.Fatalf("customerId on 2nd: %q", q1.Get("customerId"))
+	}
+}
+
+func TestInvoices_ListIter_BasicShape(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, `{"data":[`+invoiceJSON+`],"nextCursor":"","hasMore":false}`)
+	it := c.Invoices.ListIter(bgCtx(), nil)
+	if !it.Next() {
+		t.Fatalf("expected 1 item")
+	}
+	if it.Item().ID != "in_1" {
+		t.Fatalf("id: %s", it.Item().ID)
+	}
+	if it.Next() {
+		t.Fatalf("expected end of iteration")
+	}
+}
+
+func TestInvoices_ListIter_FollowsNextCursor(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, `{"data":[`+invoiceJSON+`],"nextCursor":"cur_2","hasMore":true}`)
+	other := strings.Replace(invoiceJSON, `"id":"in_1"`, `"id":"in_2"`, 1)
+	s.queue(200, `{"data":[`+other+`],"nextCursor":"","hasMore":false}`)
+
+	it := c.Invoices.ListIter(bgCtx(), nil)
+	ids := []string{}
+	for it.Next() {
+		ids = append(ids, it.Item().ID)
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(ids))
+	}
+}

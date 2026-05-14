@@ -15,6 +15,8 @@ type subscriptionWrapper struct {
 	Subscription *Subscription `json:"subscription"`
 }
 
+// List returns one page of subscriptions. Pass nil for an unfiltered
+// first page; use ListIter for cursor-driven full iteration.
 func (r *SubscriptionsResource) List(ctx context.Context, query *ListSubscriptionsQuery) (*CursorPage[Subscription], error) {
 	q := map[string]any{}
 	if query != nil {
@@ -39,6 +41,7 @@ func (r *SubscriptionsResource) List(ctx context.Context, query *ListSubscriptio
 	return out, nil
 }
 
+// Retrieve fetches a single subscription by ID.
 func (r *SubscriptionsResource) Retrieve(ctx context.Context, subID string) (*Subscription, error) {
 	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID), requestOptions{}, &w)
@@ -48,19 +51,27 @@ func (r *SubscriptionsResource) Retrieve(ctx context.Context, subID string) (*Su
 	return w.Subscription, nil
 }
 
-func (r *SubscriptionsResource) Create(ctx context.Context, input CreateSubscriptionRequest) (*Subscription, error) {
-	var w subscriptionWrapper
-	err := r.http.request(ctx, "/subscriptions", requestOptions{
+// Create starts a new subscription. Auto-attaches an Idempotency-Key;
+// supply [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *SubscriptionsResource) Create(ctx context.Context, input CreateSubscriptionRequest, opts ...RequestOption) (*Subscription, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w subscriptionWrapper
+	err := r.http.request(ctx, "/subscriptions", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
 	return w.Subscription, nil
 }
 
+// Pause stops billing on a subscription without canceling it. Resume to
+// continue. No proration; the next billing date shifts forward by the
+// paused interval.
 func (r *SubscriptionsResource) Pause(ctx context.Context, subID string) (*Subscription, error) {
 	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/pause", requestOptions{
@@ -72,6 +83,8 @@ func (r *SubscriptionsResource) Pause(ctx context.Context, subID string) (*Subsc
 	return w.Subscription, nil
 }
 
+// Resume reactivates a paused subscription. Billing restarts from the
+// shifted next-billing date set when the subscription was paused.
 func (r *SubscriptionsResource) Resume(ctx context.Context, subID string) (*Subscription, error) {
 	var w subscriptionWrapper
 	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/resume", requestOptions{
@@ -100,14 +113,18 @@ func (r *SubscriptionsResource) Cancel(ctx context.Context, subID string, input 
 
 // ChangePlan swaps the subscription to a new price. ProrationMode
 // controls whether the customer is billed immediately for the delta or
-// at the next period boundary.
-func (r *SubscriptionsResource) ChangePlan(ctx context.Context, subID string, input ChangePlanRequest) (*Subscription, error) {
-	var w subscriptionWrapper
-	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/change_plan", requestOptions{
+// at the next period boundary. Auto-attaches an Idempotency-Key; supply
+// [WithIdempotencyKey] to override.
+func (r *SubscriptionsResource) ChangePlan(ctx context.Context, subID string, input ChangePlanRequest, opts ...RequestOption) (*Subscription, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
 		method:      http.MethodPost,
 		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
-	}, &w)
+	}
+	cfg.applyTo(&reqOpts)
+	var w subscriptionWrapper
+	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/change_plan", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
