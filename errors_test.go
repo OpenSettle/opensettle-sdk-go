@@ -16,6 +16,7 @@ func TestAllErrorSubtypes_UnwrapToOpenSettleError(t *testing.T) {
 		{"InvalidStateTransition", &InvalidStateTransitionError{base}},
 		{"Authentication", &AuthenticationError{base}},
 		{"Forbidden", &ForbiddenError{base}},
+		{"RestrictedJurisdiction", &RestrictedJurisdictionError{base}},
 		{"NotFound", &NotFoundError{base}},
 		{"Conflict", &ConflictError{base}},
 		{"RateLimit", &RateLimitError{OpenSettleError: base, RetryAfter: 5}},
@@ -95,6 +96,29 @@ func TestFromEnvelope_Forbidden(t *testing.T) {
 	var target *ForbiddenError
 	if !errors.As(err, &target) {
 		t.Fatalf("got %T", err)
+	}
+}
+
+func TestFromEnvelope_RestrictedJurisdiction(t *testing.T) {
+	err := FromEnvelope(
+		[]byte(`{"error":{"code":"restricted_jurisdiction","message":"refused","request_id":"req_x","metadata":{"code":"IR","name":"Iran","reason":"sanctions"}}}`),
+		403, 0,
+	)
+	var target *RestrictedJurisdictionError
+	if !errors.As(err, &target) {
+		t.Fatalf("want *RestrictedJurisdictionError, got %T", err)
+	}
+	if target.Code != CodeRestrictedJurisdiction {
+		t.Fatalf("code: want %q, got %q", CodeRestrictedJurisdiction, target.Code)
+	}
+	if target.Metadata == nil {
+		t.Fatalf("metadata: want non-nil")
+	}
+	if got, _ := target.Metadata["code"].(string); got != "IR" {
+		t.Fatalf("metadata.code: want IR, got %q", got)
+	}
+	if got, _ := target.Metadata["reason"].(string); got != "sanctions" {
+		t.Fatalf("metadata.reason: want sanctions, got %q", got)
 	}
 }
 

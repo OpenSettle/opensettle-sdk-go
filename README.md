@@ -143,6 +143,7 @@ Every API error code in the platform's 13-code taxonomy maps to a concrete Go ty
 | `*InvalidStateTransitionError`      | `invalid_state_transition`                                 |
 | `*AuthenticationError`              | `unauthorized`                                             |
 | `*ForbiddenError`                   | `forbidden`                                                |
+| `*RestrictedJurisdictionError`      | `restricted_jurisdiction` (carries `.Metadata`)            |
 | `*NotFoundError`                    | `not_found`                                                |
 | `*ConflictError`                    | `conflict`                                                 |
 | `*RateLimitError` (`.RetryAfter`)   | `rate_limited`                                             |
@@ -151,7 +152,7 @@ Every API error code in the platform's 13-code taxonomy maps to a concrete Go ty
 | `*APIError`                         | `internal_error` and unknown codes                         |
 | `*NetworkError`                     | transport-layer failures                                   |
 
-`OpenSettleError` is the embedded base; all subtypes carry `Code`, `Status`, `RequestID`, and `Param`.
+`OpenSettleError` is the embedded base; all subtypes carry `Code`, `Status`, `RequestID`, `Param`, and `Metadata`.
 
 ## Webhooks
 
@@ -181,7 +182,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 ev, _, err := webhooks.Decode[PaymentConfirmedEvent](opts)
 ```
 
-Signature scheme: HMAC-SHA256 over `<unix_seconds>.<raw_body>`, hex-encoded. Constant-time comparison via `hmac.Equal`. Default tolerance window is 5 minutes; tune via `Opts.Tolerance`.
+Signature scheme: header is `x-opensettle-signature: t=<unix_seconds>,v1=<hex>` where `v1` is HMAC-SHA256 of `<unix_seconds>.<raw_body>` with the per-endpoint signing secret. Constant-time comparison via `hmac.Equal`. Default tolerance window is 5 minutes; tune via `Opts.Tolerance`.
 
 ## Configuration
 

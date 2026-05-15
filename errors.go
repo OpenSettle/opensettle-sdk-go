@@ -22,7 +22,12 @@ const (
 	CodeInsufficientConfirmations ErrorCode = "insufficient_confirmations"
 	CodeSigningRequired           ErrorCode = "signing_required"
 	CodeAALRequired               ErrorCode = "aal_required"
-	CodeNetworkError              ErrorCode = "network_error"
+	// CodeRestrictedJurisdiction is returned with HTTP 403 when a merchant
+	// signup is refused because the declared country / US-state is on the
+	// restricted-jurisdictions list. The envelope's Metadata carries
+	// {code, name, reason} so callers can render a dedicated refusal page.
+	CodeRestrictedJurisdiction ErrorCode = "restricted_jurisdiction"
+	CodeNetworkError           ErrorCode = "network_error"
 )
 
 // OpenSettleError is the base type. Every concrete error in this package
@@ -37,6 +42,10 @@ type OpenSettleError struct {
 	Status    int
 	RequestID string
 	Param     string
+	// Metadata is the free-form per-code metadata block. Currently used by
+	// CodeRestrictedJurisdiction to carry {code, name, reason} for the
+	// refusal page. Nil when the server didn't send a metadata block.
+	Metadata map[string]any
 }
 
 // Error formats the error for log output. Includes the stable code,
@@ -84,6 +93,16 @@ type ForbiddenError struct{ *OpenSettleError }
 // Unwrap returns the embedded *OpenSettleError so errors.Is/As can match
 // the base type.
 func (e *ForbiddenError) Unwrap() error { return e.OpenSettleError }
+
+// RestrictedJurisdictionError is a 403 returned when merchant signup is
+// refused because the declared country / US-state is on the restricted
+// list. Metadata carries {code, name, reason}; the dashboard renders a
+// dedicated refusal page rather than a generic toast.
+type RestrictedJurisdictionError struct{ *OpenSettleError }
+
+// Unwrap returns the embedded *OpenSettleError so errors.Is/As can match
+// the base type.
+func (e *RestrictedJurisdictionError) Unwrap() error { return e.OpenSettleError }
 
 // NotFoundError signals a 404 — the resource ID doesn't exist or isn't
 // visible to the calling credentials.
@@ -151,10 +170,11 @@ func (e *NetworkError) Unwrap() error { return e.OpenSettleError }
 // errorEnvelope is the JSON shape the API returns on non-2xx.
 type errorEnvelope struct {
 	Error struct {
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		Param     string `json:"param,omitempty"`
-		RequestID string `json:"request_id,omitempty"`
+		Code      string         `json:"code"`
+		Message   string         `json:"message"`
+		Param     string         `json:"param,omitempty"`
+		RequestID string         `json:"request_id,omitempty"`
+		Metadata  map[string]any `json:"metadata,omitempty"`
 	} `json:"error"`
 }
 
@@ -184,6 +204,7 @@ func FromEnvelope(body []byte, status int, retryAfter float64) error {
 		Status:    status,
 		RequestID: env.Error.RequestID,
 		Param:     env.Error.Param,
+		Metadata:  env.Error.Metadata,
 	}
 
 	switch code {
@@ -195,6 +216,8 @@ func FromEnvelope(body []byte, status int, retryAfter float64) error {
 		return &AuthenticationError{base}
 	case CodeForbidden:
 		return &ForbiddenError{base}
+	case CodeRestrictedJurisdiction:
+		return &RestrictedJurisdictionError{base}
 	case CodeNotFound:
 		return &NotFoundError{base}
 	case CodeConflict:
