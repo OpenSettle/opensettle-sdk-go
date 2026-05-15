@@ -51,6 +51,17 @@ func main() {
 }
 ```
 
+## Hosted checkout is EVM-only
+
+Hosted checkout currently supports EVM stablecoin settlement only — Base,
+Ethereum, Polygon, and Arbitrum. The `CreateCheckoutRequest.Chain` field's
+type accepts `"solana"` and `"tron"` because the API + wallet-verification
+layer support them (`/wallets` accepts `chain: "solana" | "tron"` and the
+chain reader detects inbound SPL / TRC-20 deposits to verified wallets),
+but the customer-facing hosted page does not yet render those networks.
+Pass an EVM `ChainId` here, or omit `Chain` and let the buyer pick on the
+hosted page — only EVM options will be shown.
+
 ## Resources
 
 The SDK mirrors the OpenSettle REST API one-to-one:

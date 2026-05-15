@@ -18,6 +18,12 @@ type checkoutWrapper struct {
 // Create starts a hosted checkout session. Body is required; the request
 // is sent with an auto-generated Idempotency-Key to make retries safe.
 // Supply [WithIdempotencyKey] to use a caller-chosen key instead.
+//
+// Hosted checkout is currently EVM-only (Base, Ethereum, Polygon,
+// Arbitrum). Although [CreateCheckoutRequest.Chain] accepts Solana and
+// Tron at the type level (those chains are supported by the wallets +
+// chain-reader stack), the customer-facing hosted page only renders EVM
+// networks today. See [CreateCheckoutRequest] for details.
 func (r *CheckoutsResource) Create(ctx context.Context, input CreateCheckoutRequest, opts ...RequestOption) (*Checkout, error) {
 	cfg := newRequestConfig(opts)
 	reqOpts := requestOptions{

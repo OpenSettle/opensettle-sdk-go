@@ -558,6 +558,14 @@ type Checkout struct {
 // pass InvoiceID; for Mode=subscription pass PriceID. Chain/Token are
 // optional pre-selections; if omitted, the buyer picks on the hosted
 // page.
+//
+// Hosted checkout is currently EVM-only (Base, Ethereum, Polygon,
+// Arbitrum). The Chain field's type accepts "solana" and "tron" — the
+// API + wallet-verification layer support them and the chain reader
+// will detect inbound SPL / TRC-20 deposits to verified wallets — but
+// the customer-facing hosted checkout page does not yet render those
+// networks. Pass an EVM ChainId here, or omit Chain and let the buyer
+// pick on the hosted page (only EVM options will appear).
 type CreateCheckoutRequest struct {
 	Mode             CheckoutMode `json:"mode"`
 	CustomerID       string       `json:"customerId,omitempty"`
