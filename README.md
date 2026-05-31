@@ -146,7 +146,7 @@ if err != nil {
 }
 ```
 
-Every API error code in the platform's 13-code taxonomy maps to a concrete Go type:
+Every API error code in the platform's 15-code taxonomy maps to a concrete Go type:
 
 | Error type                          | Codes                                                      |
 | ----------------------------------- | ---------------------------------------------------------- |
@@ -155,6 +155,8 @@ Every API error code in the platform's 13-code taxonomy maps to a concrete Go ty
 | `*AuthenticationError`              | `unauthorized`                                             |
 | `*ForbiddenError`                   | `forbidden`                                                |
 | `*RestrictedJurisdictionError`      | `restricted_jurisdiction` (carries `.Metadata`)            |
+| `*KybRequiredError`                 | `kyb_required` (HTTP 403)                                  |
+| `*AttestationRequiredError`         | `attestation_required` (HTTP 412)                          |
 | `*NotFoundError`                    | `not_found`                                                |
 | `*ConflictError`                    | `conflict`                                                 |
 | `*RateLimitError` (`.RetryAfter`)   | `rate_limited`                                             |

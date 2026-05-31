@@ -27,7 +27,15 @@ const (
 	// restricted-jurisdictions list. The envelope's Metadata carries
 	// {code, name, reason} so callers can render a dedicated refusal page.
 	CodeRestrictedJurisdiction ErrorCode = "restricted_jurisdiction"
-	CodeNetworkError           ErrorCode = "network_error"
+	// CodeKybRequired is returned with HTTP 403 when an action requires the
+	// workspace to have completed KYB (know-your-business) review and it has
+	// not yet been approved for live operation.
+	CodeKybRequired ErrorCode = "kyb_required"
+	// CodeAttestationRequired is returned with HTTP 412 when a high-risk
+	// vertical requires the merchant to complete a self-attestation
+	// (e.g. CBD/firearms/regulated content) before the action can proceed.
+	CodeAttestationRequired ErrorCode = "attestation_required"
+	CodeNetworkError        ErrorCode = "network_error"
 )
 
 // OpenSettleError is the base type. Every concrete error in this package
@@ -103,6 +111,25 @@ type RestrictedJurisdictionError struct{ *OpenSettleError }
 // Unwrap returns the embedded *OpenSettleError so errors.Is/As can match
 // the base type.
 func (e *RestrictedJurisdictionError) Unwrap() error { return e.OpenSettleError }
+
+// KybRequiredError is a 403 returned when the action requires the
+// workspace to have completed KYB (know-your-business) review and be
+// approved for live operation. Direct the merchant to finish KYB before
+// retrying.
+type KybRequiredError struct{ *OpenSettleError }
+
+// Unwrap returns the embedded *OpenSettleError so errors.Is/As can match
+// the base type.
+func (e *KybRequiredError) Unwrap() error { return e.OpenSettleError }
+
+// AttestationRequiredError is a 412 returned when a high-risk vertical
+// requires the merchant to complete a self-attestation (e.g.
+// CBD/firearms/regulated content) before the action can proceed.
+type AttestationRequiredError struct{ *OpenSettleError }
+
+// Unwrap returns the embedded *OpenSettleError so errors.Is/As can match
+// the base type.
+func (e *AttestationRequiredError) Unwrap() error { return e.OpenSettleError }
 
 // NotFoundError signals a 404 — the resource ID doesn't exist or isn't
 // visible to the calling credentials.
@@ -218,6 +245,10 @@ func FromEnvelope(body []byte, status int, retryAfter float64) error {
 		return &ForbiddenError{base}
 	case CodeRestrictedJurisdiction:
 		return &RestrictedJurisdictionError{base}
+	case CodeKybRequired:
+		return &KybRequiredError{base}
+	case CodeAttestationRequired:
+		return &AttestationRequiredError{base}
 	case CodeNotFound:
 		return &NotFoundError{base}
 	case CodeConflict:

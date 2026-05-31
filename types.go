@@ -398,23 +398,40 @@ const (
 	SubCanceled SubscriptionStatus = "canceled"
 )
 
-// AutopayMode controls how a subscription's renewal charge is collected.
-// allowance uses an ERC-20 spend approval against the merchant's
-// collector; smart-wallet uses a session-key-style preauthorization;
-// manual prompts the customer to sign each renewal in their wallet.
+// AutopayMode names how a subscription's renewal charge is intended to be
+// collected. Today only manual is operative: every recurring invoice is
+// paid on-chain by the customer signing each renewal in their own wallet.
+// OpenSettle is non-custodial and never pulls funds.
+//
+// allowance and smart-wallet are roadmap modes and NOT yet active —
+// allowance would use an ERC-20 spend approval against the merchant's
+// collector, and smart-wallet a session-key-style preauthorization, but
+// neither is wired up. They are kept as constants for forward-compat;
+// selecting them today does not enable automatic pulls.
 type AutopayMode string
 
 const (
-	AutopayAllowance   AutopayMode = "allowance"
+	// AutopayAllowance is a roadmap mode and NOT yet active. Reserved for a
+	// future ERC-20 spend-approval flow; today it does not pull funds.
+	AutopayAllowance AutopayMode = "allowance"
+	// AutopaySmartWallet is a roadmap mode and NOT yet active. Reserved for
+	// a future session-key-style preauthorization flow; today it does not
+	// pull funds.
 	AutopaySmartWallet AutopayMode = "smart-wallet"
-	AutopayManual      AutopayMode = "manual"
+	// AutopayManual is the only operative mode: the customer pays each
+	// recurring invoice on-chain by signing the renewal in their wallet.
+	AutopayManual AutopayMode = "manual"
 )
 
 // Subscription is a recurring billing arrangement. AmountMinor is in
 // minor units of Currency (fiat); MRRMinor is the normalized monthly
-// recurring revenue contribution. AllowanceTx/AllowanceRemaining are
-// populated only when Autopay=allowance. CurrentPeriodEnd and
-// NextBillingDate are server-managed.
+// recurring revenue contribution. CurrentPeriodEnd and NextBillingDate
+// are server-managed.
+//
+// Autopay is currently always manual: the customer pays each renewal
+// on-chain by signing in their wallet (OpenSettle never pulls funds).
+// AllowanceTx/AllowanceRemaining are reserved for the roadmap allowance
+// mode and are normally nil today.
 type Subscription struct {
 	ID                 string             `json:"id"`
 	WorkspaceID        string             `json:"workspaceId"`
@@ -442,7 +459,10 @@ type Subscription struct {
 }
 
 // CreateSubscriptionRequest is the body for POST /subscriptions. Autopay
-// defaults to manual when empty. TrialDays > 0 starts the subscription
+// defaults to manual when empty, and manual is currently the only
+// operative mode — the customer pays each renewal on-chain by signing in
+// their wallet (allowance/smart-wallet are roadmap and not yet active;
+// OpenSettle never pulls funds). TrialDays > 0 starts the subscription
 // in trialing status; the first charge fires at trial end.
 type CreateSubscriptionRequest struct {
 	CustomerID string      `json:"customerId"`
@@ -546,9 +566,10 @@ type Checkout struct {
 	CompletedAt *string        `json:"completedAt"`
 	Metadata    Metadata       `json:"metadata"`
 	CreatedAt   string         `json:"createdAt"`
-	// HostedURL is a relative URL path (e.g. "/checkout/<hostedToken>");
-	// concatenate with the web origin (e.g. "https://opensettle.io"+HostedURL)
-	// to get the buyer-facing redirect URL.
+	// HostedURL is the absolute buyer-facing redirect URL
+	// (e.g. "https://opensettle.io/checkout/<hostedToken>"). Redirect to it
+	// directly. Uses an unguessable hosted-token, not the timestamp-prefixed
+	// ID, so siblings can't be brute-force enumerated.
 	HostedURL string `json:"hostedUrl"`
 }
 

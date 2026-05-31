@@ -145,7 +145,7 @@ returning a zero-valued struct.
 - Eight resources at full parity with `@opensettle/sdk` Node SDK v0.2.0:
   Checkouts, Customers, Invoices, Payments, Products (+ Prices),
   Subscriptions, WebhookEndpoints.
-- Typed error hierarchy (13 codes) reachable via `errors.As`:
+- Typed error hierarchy (15 codes) reachable via `errors.As`:
   `*InvalidRequestError`, `*InvalidStateTransitionError`,
   `*AuthenticationError`, `*ForbiddenError`, `*NotFoundError`,
   `*ConflictError`, `*RateLimitError` (with `RetryAfter`),
