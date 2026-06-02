@@ -62,6 +62,12 @@ but the customer-facing hosted page does not yet render those networks.
 Pass an EVM `ChainId` here, or omit `Chain` and let the buyer pick on the
 hosted page — only EVM options will be shown.
 
+## Recipes
+
+Runnable, compile-tested examples — hosted checkout, subscriptions, webhook
+verification, pagination, and refunds — across all four SDKs in the
+[OpenSettle Cookbook](https://github.com/OpenSettle/opensettle-cookbook).
+
 ## Resources
 
 The SDK mirrors the OpenSettle REST API one-to-one:
