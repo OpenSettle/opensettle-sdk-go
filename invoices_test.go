@@ -29,9 +29,15 @@ func TestInvoices_List_QueryParams(t *testing.T) {
 	defer s.Close()
 	c := newTestClient(t, s)
 	s.queue(200, `{"data":[],"nextCursor":""}`)
-	_, _ = c.Invoices.List(bgCtx(), &ListInvoicesQuery{CustomerID: "cu_1", Status: InvoiceOpen, Limit: 10})
+	_, _ = c.Invoices.List(bgCtx(), &ListInvoicesQuery{
+		CustomerID: "cu_1",
+		Status:     InvoiceOpen,
+		From:       "2026-04-01",
+		To:         "2026-06-30",
+		Limit:      10,
+	})
 	q := s.lastRequest(t).Query
-	for _, want := range []string{"customerId=cu_1", "status=open", "limit=10"} {
+	for _, want := range []string{"customerId=cu_1", "status=open", "from=2026-04-01", "to=2026-06-30", "limit=10"} {
 		if !strings.Contains(q, want) {
 			t.Errorf("missing %q in %q", want, q)
 		}

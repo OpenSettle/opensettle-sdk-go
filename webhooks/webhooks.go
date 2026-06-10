@@ -33,6 +33,13 @@ const (
 	ReasonStaleTimestamp    Reason = "stale_timestamp"
 	ReasonSignatureMismatch Reason = "signature_mismatch"
 	ReasonInvalidBody       Reason = "invalid_body"
+	// ReasonMissingSecret fires when Verify is called with an empty
+	// Secret — surfaces a deployment-time misconfiguration loudly
+	// instead of silently HMAC-ing with an empty key and reporting every
+	// delivery as ReasonSignatureMismatch.
+	//
+	// 2026-05-20 night-run round 6 — NR6 cross-SDK F-2 parity with Node.
+	ReasonMissingSecret Reason = "missing_secret"
 )
 
 // VerificationError is the only error type Verify returns. Handlers
@@ -61,10 +68,20 @@ type Opts struct {
 	RawBody         []byte
 	SignatureHeader string
 	Secret          string
-	// Tolerance bounds how stale a timestamp may be. Default 5 minutes.
-	// Set to 0 to disable timestamp checking entirely (not recommended
-	// outside replay-driven tests).
+	// Tolerance bounds how stale a timestamp may be. Default 5 minutes
+	// (the zero value triggers the default — Go-style ergonomics, but
+	// see DisableTimestampCheck if you actually want to skip the gate).
 	Tolerance time.Duration
+	// DisableTimestampCheck skips the tolerance window entirely.
+	// Intended for replay-driven tests and historical backfills.
+	//
+	// 2026-05-20 night-run round 6 — NR6 cross-SDK F-1: prior to this
+	// flag, passing Tolerance: 0 silently re-enabled the 5-minute
+	// default (Go's zero-value convention), which diverged from the
+	// Node/Python/Rust SDKs where 0 is the documented opt-out. The new
+	// flag preserves the zero-value-means-default behaviour for
+	// existing callers while restoring cross-SDK parity for new ones.
+	DisableTimestampCheck bool
 	// Now is the reference time used for tolerance checks. Defaults to
 	// time.Now. Override in tests.
 	Now func() time.Time
@@ -75,6 +92,18 @@ const defaultTolerance = 5 * time.Minute
 // Verify checks the signature and tolerance window, returning the
 // parsed body and timestamp on success.
 func Verify(opts Opts) (*Verified, error) {
+	// 2026-05-20 night-run round 6 — NR6 cross-SDK F-2: loud-fail on an
+	// empty secret to match the Node SDK. A merchant deploying with
+	// OPENSETTLE_WEBHOOK_SECRET unset/empty would otherwise see every
+	// delivery rejected as ReasonSignatureMismatch (HMAC over the empty
+	// key) and assume their endpoint is under attack.
+	if opts.Secret == "" {
+		return nil, &VerificationError{
+			Reason:  ReasonMissingSecret,
+			Message: "OpenSettle webhook secret is empty — set the endpoint's `whsec_…` value before verifying deliveries",
+		}
+	}
+
 	if opts.SignatureHeader == "" {
 		return nil, &VerificationError{Reason: ReasonMissingHeader, Message: "missing x-opensettle-signature header"}
 	}
@@ -88,7 +117,7 @@ func Verify(opts Opts) (*Verified, error) {
 	if tolerance == 0 {
 		tolerance = defaultTolerance
 	}
-	if tolerance > 0 {
+	if !opts.DisableTimestampCheck && tolerance > 0 {
 		nowFn := opts.Now
 		if nowFn == nil {
 			nowFn = time.Now

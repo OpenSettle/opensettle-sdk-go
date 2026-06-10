@@ -29,8 +29,20 @@ func (r *PaymentsResource) List(ctx context.Context, query *ListPaymentsQuery) (
 		if query.CustomerID != "" {
 			q["customerId"] = query.CustomerID
 		}
+		if query.SubscriptionID != "" {
+			q["subscriptionId"] = query.SubscriptionID
+		}
 		if query.Status != "" {
 			q["status"] = string(query.Status)
+		}
+		if query.ScreeningVerdict != "" {
+			q["screeningVerdict"] = string(query.ScreeningVerdict)
+		}
+		if query.From != "" {
+			q["from"] = query.From
+		}
+		if query.To != "" {
+			q["to"] = query.To
 		}
 	}
 	out := &CursorPage[Payment]{}

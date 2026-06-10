@@ -422,11 +422,11 @@ func TestPaths_WebhookEndpoints(t *testing.T) {
 		{func() { s.queue(200, endpointWrappedJSON); _, _ = c.WebhookEndpoints.Retrieve(bgCtx(), "we_1") }, "/v1/workspaces/ws_test/webhook_endpoints/we_1"},
 		{func() {
 			s.queue(200, `{"secret":"s","rotationGraceUntil":""}`)
-			_, _ = c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1", RotateWebhookSecretRequest{})
+			_, _ = c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1")
 		}, "/v1/workspaces/ws_test/webhook_endpoints/we_1/rotate"},
 		{func() {
-			s.queue(200, `{"ok":true,"status":200,"latencyMs":1}`)
-			_, _ = c.WebhookEndpoints.Test(bgCtx(), "we_1", TestWebhookEndpointRequest{EventType: "t"})
+			s.queue(200, `{"eventId":"evt_1"}`)
+			_, _ = c.WebhookEndpoints.Test(bgCtx(), "we_1")
 		}, "/v1/workspaces/ws_test/webhook_endpoints/we_1/test"},
 	}
 	for _, tc := range cases {

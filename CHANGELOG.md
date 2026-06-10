@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Major versions track the HTTP API major version (`v1`).
 
+## [Unreleased]
+
+Brings the SDK to parity with the published `@opensettle/sdk` / `opensettle`
+`0.5.1` release. All changes are additive and backward-compatible.
+
+### Added
+
+- **`Customer.LifetimeValueMinor int`** (`json:"lifetimeValueMinor"`) — the
+  settled lifetime value in MINOR units, computed live by the API as
+  `SUM(amountMinor)` over payments with status `confirmed`/`refunded`.
+  Present on every customer-returning endpoint (List / Retrieve / Create /
+  Update). **This is the field to use for LTV display.** The existing
+  `Customer.LifetimeValue` field mirrors the stored `lifetime_value` column,
+  which is a never-written cache that is effectively always `0` — it is now
+  documented as deprecated; read `LifetimeValueMinor` instead.
+
+- **`Payment` carries sanctions-screening fields.** Three new fields mirror
+  the API serializer (`apps/api/src/services/payments.ts`):
+    - `ScreeningVerdict ScreeningVerdict` (`json:"screeningVerdict"`) — one of
+      the new `ScreeningNotScreened` / `ScreeningClean` / `ScreeningFlagged` /
+      `ScreeningError` consts. Default with the in-house no-op provider is
+      `ScreeningNotScreened` on every row.
+    - `ScreeningProvider *string` (`json:"screeningProvider"`)
+    - `ScreeningScreenedAt *string` (`json:"screeningScreenedAt"`)
+
+- **`ListPaymentsQuery` gains `ScreeningVerdict`, `SubscriptionID`, `From`,
+  and `To`.** `ScreeningVerdict` filters the ops triage surface;
+  `SubscriptionID` narrows to one subscription; `From`/`To` are inclusive
+  ISO-8601 bounds on `createdAt` (any ISO 8601 string; `To` must be `>=`
+  `From`) for windowing a reporting period / CSV export.
+
+- **`ListInvoicesQuery` gains `From` and `To`** — same inclusive ISO-8601
+  `createdAt` bounds as payments, for reporting-period filtering / CSV export.
+
+- **`CreateCheckoutRequest` gains `Amount`, `Currency`, and `Description`**
+  for ad-hoc one-time charges (`Mode=payment` only). The API now accepts
+  exactly ONE charge source for `Mode=payment`: `InvoiceID` (an existing
+  invoice), `PriceID` (a one-time price), or `Amount` — a brand-new ad-hoc
+  path that needs no pre-created invoice or product price.
+    - `Amount int` (`json:"amount,omitempty"`) — the charge in MINOR units
+      (cents). Must be a positive integer; the zero value is omitted, so an
+      unset `Amount` is never sent. Pair with `Chain` + `Token`.
+    - `Currency string` (`json:"currency,omitempty"`) — ISO-4217 code for the
+      ad-hoc `Amount`; defaults to USD server-side.
+    - `Description string` (`json:"description,omitempty"`) — optional
+      buyer-facing description for an ad-hoc `Amount` checkout.
+
+### Notes
+
+- `Products.DeletePrice` already returns `error` only (no envelope), matching
+  the API's `204 No Content`; no change was needed (the `0.5.1` JS/Python
+  `deletePrice → void` fix was a type-correctness fix that the Go signature
+  never had wrong).
+- `UpdateWebhookEndpointRequest.Description *string` already supports clearing
+  the field (nil pointer), matching the `description: string | null` the
+  server accepts.
+
 ## [0.5.0] - 2026-05-15
 
 ### Added

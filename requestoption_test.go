@@ -111,7 +111,7 @@ func TestWithIdempotencyKey_OverridesAutoOnAllWriteResources(t *testing.T) {
 		{
 			name: "WebhookEndpoints.RotateSecret",
 			call: func(t *testing.T, c *Client) error {
-				_, err := c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1", RotateWebhookSecretRequest{}, WithIdempotencyKey("k-customer"))
+				_, err := c.WebhookEndpoints.RotateSecret(bgCtx(), "we_1", WithIdempotencyKey("k-customer"))
 				return err
 			},
 		},

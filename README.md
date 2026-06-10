@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/OpenSettle/opensettle-sdk-go.svg)](https://pkg.go.dev/github.com/OpenSettle/opensettle-sdk-go)
 
-Official Go SDK for the [OpenSettle](https://opensettle.io) API — stablecoin billing on Base, Ethereum, Polygon, Arbitrum, Solana, and Tron. Non-custodial: OpenSettle never holds your funds.
+Official Go SDK for the [OpenSettle](https://opensettle.io) API — stablecoin billing: USDC on Base, Ethereum, Polygon, Arbitrum, and Solana; USDT on Ethereum, Polygon, Arbitrum, Solana, and Tron. Hosted checkout is EVM-only. Non-custodial: OpenSettle never holds your funds.
 
 Hand-written, zero third-party runtime dependencies, idiomatic `context.Context` throughout, typed errors reachable with `errors.As`, signed-webhook verifier in a separate sub-package.
 
@@ -62,12 +62,6 @@ but the customer-facing hosted page does not yet render those networks.
 Pass an EVM `ChainId` here, or omit `Chain` and let the buyer pick on the
 hosted page — only EVM options will be shown.
 
-## Recipes
-
-Runnable, compile-tested examples — hosted checkout, subscriptions, webhook
-verification, pagination, and refunds — across all four SDKs in the
-[OpenSettle Cookbook](https://github.com/OpenSettle/opensettle-cookbook).
-
 ## Resources
 
 The SDK mirrors the OpenSettle REST API one-to-one:
@@ -77,7 +71,6 @@ The SDK mirrors the OpenSettle REST API one-to-one:
 | `client.Checkouts`        | `/v1/workspaces/<ws>/checkouts`           |
 | `client.Customers`        | `/v1/workspaces/<ws>/customers`           |
 | `client.Invoices`         | `/v1/workspaces/<ws>/invoices`            |
-| `client.PaymentLinks`     | `/v1/workspaces/<ws>/payment_links`       |
 | `client.Payments`         | `/v1/workspaces/<ws>/payments`            |
 | `client.Products`         | `/v1/workspaces/<ws>/products` (+ prices) |
 | `client.Subscriptions`    | `/v1/workspaces/<ws>/subscriptions`       |

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const paymentJSON = `{"id":"pay_1","workspaceId":"ws","customerId":"cu_1","subscriptionId":null,"invoiceId":"in_1","walletId":null,"amountMinor":5000,"feeMinor":50,"netMinor":4950,"currency":"USD","token":"USDC","chain":"base","status":"confirmed","failureReason":null,"description":null,"txHash":"0xabc","blockNumber":1234,"confirmations":12,"refundTxHash":null,"refundAmountMinor":null,"refundBroadcastAt":null,"refundedAt":null,"refundReason":null,"createdAt":"2026-05-12T15:00:00.000Z","confirmedAt":"2026-05-12T15:01:00.000Z"}`
+const paymentJSON = `{"id":"pay_1","workspaceId":"ws","customerId":"cu_1","subscriptionId":null,"invoiceId":"in_1","walletId":null,"amountMinor":5000,"feeMinor":50,"netMinor":4950,"currency":"USD","token":"USDC","chain":"base","status":"confirmed","failureReason":null,"description":null,"txHash":"0xabc","blockNumber":1234,"confirmations":12,"refundTxHash":null,"refundAmountMinor":null,"refundBroadcastAt":null,"refundedAt":null,"refundReason":null,"screeningVerdict":"not_screened","screeningProvider":null,"screeningScreenedAt":null,"createdAt":"2026-05-12T15:00:00.000Z","confirmedAt":"2026-05-12T15:01:00.000Z"}`
 const paymentWrappedJSON = `{"payment":` + paymentJSON + `}`
 
 const refundResponseJSON = `{"payment":` + paymentJSON + `,"unsignedTx":{"chain":"base","token":"USDC","to":"0xtoken","amountMinor":5000,"instructions":"sign and broadcast"}}`
@@ -31,12 +31,48 @@ func TestPayments_List_Query(t *testing.T) {
 	defer s.Close()
 	c := newTestClient(t, s)
 	s.queue(200, `{"data":[],"nextCursor":""}`)
-	_, _ = c.Payments.List(bgCtx(), &ListPaymentsQuery{CustomerID: "cu_1", Status: PaymentConfirmed, Limit: 5})
+	_, _ = c.Payments.List(bgCtx(), &ListPaymentsQuery{
+		CustomerID:       "cu_1",
+		SubscriptionID:   "sub_1",
+		Status:           PaymentConfirmed,
+		ScreeningVerdict: ScreeningFlagged,
+		From:             "2026-04-01",
+		To:               "2026-06-30",
+		Limit:            5,
+	})
 	q := s.lastRequest(t).Query
-	for _, want := range []string{"customerId=cu_1", "status=confirmed", "limit=5"} {
+	for _, want := range []string{
+		"customerId=cu_1",
+		"subscriptionId=sub_1",
+		"status=confirmed",
+		"screeningVerdict=screened_flagged",
+		"from=2026-04-01",
+		"to=2026-06-30",
+		"limit=5",
+	} {
 		if !strings.Contains(q, want) {
 			t.Errorf("missing %q in %q", want, q)
 		}
+	}
+}
+
+func TestPayments_Retrieve_ScreeningFields(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, `{"payment":{"id":"pay_2","workspaceId":"ws","customerId":null,"subscriptionId":null,"invoiceId":null,"walletId":null,"amountMinor":100,"feeMinor":0,"netMinor":100,"currency":"USD","token":"USDC","chain":"base","status":"confirmed","failureReason":null,"description":null,"txHash":null,"blockNumber":null,"confirmations":0,"refundTxHash":null,"refundAmountMinor":null,"refundBroadcastAt":null,"refundedAt":null,"refundReason":null,"screeningVerdict":"screened_flagged","screeningProvider":"acme","screeningScreenedAt":"2026-05-12T15:02:00.000Z","createdAt":"2026-05-12T15:00:00.000Z","confirmedAt":null}}`)
+	out, err := c.Payments.Retrieve(bgCtx(), "pay_2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.ScreeningVerdict != ScreeningFlagged {
+		t.Errorf("screeningVerdict: %q", out.ScreeningVerdict)
+	}
+	if out.ScreeningProvider == nil || *out.ScreeningProvider != "acme" {
+		t.Errorf("screeningProvider: %+v", out.ScreeningProvider)
+	}
+	if out.ScreeningScreenedAt == nil || *out.ScreeningScreenedAt != "2026-05-12T15:02:00.000Z" {
+		t.Errorf("screeningScreenedAt: %+v", out.ScreeningScreenedAt)
 	}
 }
 

@@ -84,14 +84,17 @@ func (r *WebhookEndpointsResource) Delete(ctx context.Context, endpointID string
 
 // RotateSecret rotates the signing secret. Returns the same
 // {endpoint, signingSecret} envelope as Create — store SigningSecret
-// immediately. Step-up auth (AAL=2) required; API-key callers receive
+// immediately. The endpoint takes no request body.
+//
+// There is NO grace window: the previous secret stops verifying
+// immediately, so deploy the new secret before (or atomically with)
+// calling this. Step-up auth (AAL=2) required; API-key callers receive
 // *StepUpRequiredError. Auto-attaches an Idempotency-Key; supply
 // [WithIdempotencyKey] to override.
-func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID string, input RotateWebhookSecretRequest, opts ...RequestOption) (*CreateWebhookEndpointResponse, error) {
+func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID string, opts ...RequestOption) (*CreateWebhookEndpointResponse, error) {
 	cfg := newRequestConfig(opts)
 	reqOpts := requestOptions{
 		method:      http.MethodPost,
-		body:        input,
 		idempotency: idempotency{mode: idempotencyAuto},
 	}
 	cfg.applyTo(&reqOpts)
@@ -103,14 +106,15 @@ func (r *WebhookEndpointsResource) RotateSecret(ctx context.Context, endpointID 
 	return out, nil
 }
 
-// Test fires a sample event at the endpoint synchronously to verify
-// wiring. The returned status is the response status the endpoint
-// returned to OpenSettle.
-func (r *WebhookEndpointsResource) Test(ctx context.Context, endpointID string, input TestWebhookEndpointRequest) (*TestWebhookEndpointResponse, error) {
+// Test emits a sample event for the endpoint to verify wiring. It takes no
+// request body — the server generates the sample payload and fans it out
+// asynchronously through the normal delivery + retry pipeline. The returned
+// EventID identifies the emitted event; poll the events / deliveries
+// endpoints to observe whether your endpoint accepted it.
+func (r *WebhookEndpointsResource) Test(ctx context.Context, endpointID string) (*TestWebhookEndpointResponse, error) {
 	out := &TestWebhookEndpointResponse{}
 	err := r.http.request(ctx, "/webhook_endpoints/"+url.PathEscape(endpointID)+"/test", requestOptions{
 		method: http.MethodPost,
-		body:   input,
 	}, out)
 	if err != nil {
 		return nil, err

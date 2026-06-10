@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const customerJSON = `{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"A B","wallet":null,"country":null,"status":"active","activeSubscriptions":0,"lifetimeValue":0,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z","deletedAt":null}`
+const customerJSON = `{"id":"cu_1","workspaceId":"ws","email":"a@b","name":"A B","wallet":null,"country":null,"status":"active","activeSubscriptions":0,"lifetimeValue":0,"lifetimeValueMinor":12345,"metadata":null,"createdAt":"2026-05-12T15:00:00.000Z","deletedAt":null}`
 const customerWrappedJSON = `{"customer":` + customerJSON + `}`
 
 func TestCustomers_List_HappyPath(t *testing.T) {
@@ -60,6 +60,14 @@ func TestCustomers_Retrieve_HappyPath(t *testing.T) {
 	}
 	if out.ID != "cu_1" {
 		t.Fatalf("id: %s", out.ID)
+	}
+	// LifetimeValueMinor carries the live-computed LTV; the legacy
+	// LifetimeValue is the always-0 stored cache.
+	if out.LifetimeValueMinor != 12345 {
+		t.Errorf("lifetimeValueMinor: %d", out.LifetimeValueMinor)
+	}
+	if out.LifetimeValue != 0 {
+		t.Errorf("lifetimeValue (legacy, want 0): %d", out.LifetimeValue)
 	}
 }
 

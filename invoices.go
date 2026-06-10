@@ -32,6 +32,12 @@ func (r *InvoicesResource) List(ctx context.Context, query *ListInvoicesQuery) (
 		if query.Status != "" {
 			q["status"] = string(query.Status)
 		}
+		if query.From != "" {
+			q["from"] = query.From
+		}
+		if query.To != "" {
+			q["to"] = query.To
+		}
 	}
 	out := &CursorPage[Invoice]{}
 	err := r.http.request(ctx, "/invoices", requestOptions{query: q}, out)

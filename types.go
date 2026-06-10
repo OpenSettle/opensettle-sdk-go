@@ -56,7 +56,7 @@ const (
 
 // Customer is a merchant's customer record. Email and Name are stored
 // encrypted at rest; the API returns the decrypted view on Retrieve.
-// ActiveSubscriptions and LifetimeValue are server-computed rollups.
+// ActiveSubscriptions and LifetimeValueMinor are server-computed rollups.
 // DeletedAt is set when the row is soft-deleted; reads still return it
 // for audit purposes.
 type Customer struct {
@@ -68,10 +68,22 @@ type Customer struct {
 	Country             *string        `json:"country"`
 	Status              CustomerStatus `json:"status"`
 	ActiveSubscriptions int            `json:"activeSubscriptions"`
-	LifetimeValue       int            `json:"lifetimeValue"`
-	Metadata            Metadata       `json:"metadata"`
-	CreatedAt           string         `json:"createdAt"`
-	DeletedAt           *string        `json:"deletedAt"`
+	// LifetimeValue mirrors the stored `lifetime_value` column, which is a
+	// never-written cache that is effectively always 0 — do NOT display it.
+	// Use [Customer.LifetimeValueMinor] instead. Kept on the struct because
+	// the API still serializes `lifetimeValue` on every customer row.
+	//
+	// Deprecated: read LifetimeValueMinor — this field is always 0.
+	LifetimeValue int `json:"lifetimeValue"`
+	// LifetimeValueMinor is the settled lifetime value in MINOR units (e.g.
+	// cents), computed live by the API as SUM(amountMinor) over payments with
+	// status confirmed or refunded. Present on every customer-returning
+	// endpoint (List / Retrieve / Create / Update). This is the field to use
+	// for LTV display.
+	LifetimeValueMinor int      `json:"lifetimeValueMinor"`
+	Metadata           Metadata `json:"metadata"`
+	CreatedAt          string   `json:"createdAt"`
+	DeletedAt          *string  `json:"deletedAt"`
 }
 
 // CreateCustomerRequest is the body for POST /customers. Email is the
@@ -115,6 +127,8 @@ type PriceInterval string
 
 const (
 	PriceOneTime PriceInterval = "one_time"
+	PriceMinute  PriceInterval = "minute"
+	PriceHour    PriceInterval = "hour"
 	PriceWeek    PriceInterval = "week"
 	PriceMonth   PriceInterval = "month"
 	PriceYear    PriceInterval = "year"
@@ -252,13 +266,17 @@ type CreateInvoiceRequest struct {
 }
 
 // ListInvoicesQuery filters GET /invoices. CustomerID narrows to one
-// customer; Status filters by lifecycle bucket. Cursor + Limit drive
-// pagination.
+// customer; Status filters by lifecycle bucket. From and To are
+// inclusive ISO-8601 bounds on createdAt — pass any ISO 8601 string
+// (e.g. "2026-04-01" or "2026-04-01T00:00:00Z") to window a reporting
+// period; To must be >= From. Cursor + Limit drive pagination.
 type ListInvoicesQuery struct {
 	Cursor     string
 	Limit      int
 	CustomerID string
 	Status     InvoiceStatus
+	From       string
+	To         string
 }
 
 // --- Payment ----------------------------------------------------------
@@ -276,6 +294,20 @@ const (
 	PaymentFailed    PaymentStatus = "failed"
 	PaymentRefunded  PaymentStatus = "refunded"
 	PaymentReorged   PaymentStatus = "reorged"
+)
+
+// ScreeningVerdict is the per-payment sanctions-screening result the API
+// populates. Today's default with the in-house no-op provider is
+// ScreeningNotScreened on every row; once a real provider is wired,
+// individual rows transition to the other states and ScreeningFlagged
+// becomes the ops triage queue.
+type ScreeningVerdict string
+
+const (
+	ScreeningNotScreened ScreeningVerdict = "not_screened"
+	ScreeningClean       ScreeningVerdict = "screened_clean"
+	ScreeningFlagged     ScreeningVerdict = "screened_flagged"
+	ScreeningError       ScreeningVerdict = "screen_error"
 )
 
 // Payment is a single on-chain settlement attempt. AmountMinor, FeeMinor,
@@ -395,9 +427,11 @@ type UnsignedTxEnvelope struct {
 }
 
 // InitiateRefundResponse is the multi-key envelope returned by
-// POST /payments/<id>/refund. The Payment is in status refund_pending;
-// the UnsignedTx must be signed by the merchant wallet and broadcast,
-// then reported back via RefundBroadcast.
+// POST /payments/<id>/refund. There is no "refund_pending" payment status:
+// the returned Payment stays PaymentConfirmed (refund metadata is recorded
+// on it). The UnsignedTx must be signed by the merchant wallet and
+// broadcast, then reported back via RefundBroadcast; the Payment only
+// transitions to PaymentRefunded once the on-chain refund confirms.
 type InitiateRefundResponse struct {
 	Payment    Payment            `json:"payment"`
 	UnsignedTx UnsignedTxEnvelope `json:"unsignedTx"`
@@ -410,14 +444,22 @@ type RecordRefundBroadcastRequest struct {
 	RefundTxHash string `json:"refundTxHash"`
 }
 
-// ListPaymentsQuery filters GET /payments. CustomerID narrows to one
-// customer; Status filters by on-chain lifecycle bucket. Cursor + Limit
-// drive pagination.
+// ListPaymentsQuery filters GET /payments. CustomerID / SubscriptionID
+// narrow to one customer / subscription; Status filters by on-chain
+// lifecycle bucket; ScreeningVerdict filters by sanctions-screening
+// result (the ops triage surface). From and To are inclusive ISO-8601
+// bounds on createdAt — pass any ISO 8601 string (e.g. "2026-04-01" or
+// "2026-04-01T00:00:00Z") to window a reporting period; To must be >=
+// From. Cursor + Limit drive pagination.
 type ListPaymentsQuery struct {
-	Cursor     string
-	Limit      int
-	CustomerID string
-	Status     PaymentStatus
+	Cursor           string
+	Limit            int
+	CustomerID       string
+	SubscriptionID   string
+	Status           PaymentStatus
+	ScreeningVerdict ScreeningVerdict
+	From             string
+	To               string
 }
 
 // --- Subscription -----------------------------------------------------
@@ -520,8 +562,13 @@ const (
 )
 
 // ChangePlanRequest is the body for POST /subscriptions/<id>/change_plan.
-// ProrationMode controls when the swap takes effect; default is
-// immediately when empty.
+// ProrationMode controls when the swap takes effect; the default (and only
+// currently supported value) is at_period_end when empty.
+//
+// ProrationImmediately ("immediately") is NOT yet implemented: there is no
+// mid-cycle proration engine, so passing it is rejected with an
+// invalid_request error. Use ProrationAtPeriodEnd (or leave it empty) until
+// immediate proration ships.
 type ChangePlanRequest struct {
 	PriceID       string        `json:"priceId"`
 	ProrationMode ProrationMode `json:"prorationMode,omitempty"`
@@ -580,10 +627,10 @@ const (
 	CheckoutExpired   CheckoutStatus = "expired"
 )
 
-// Checkout is a hosted payment session. HostedURL is the relative path
-// (e.g. "/checkout/<token>") to redirect the buyer to; concatenate with
-// the OpenSettle web origin. AmountMinor + Currency are populated once
-// the underlying invoice/price is resolved.
+// Checkout is a hosted payment session. HostedURL (see the field below) is the
+// ABSOLUTE buyer-facing redirect URL — use it directly, no concatenation.
+// AmountMinor + Currency are populated once the underlying invoice/price (or
+// ad-hoc amount) is resolved.
 type Checkout struct {
 	ID          string         `json:"id"`
 	WorkspaceID string         `json:"workspaceId"`
@@ -612,10 +659,13 @@ type Checkout struct {
 
 // CreateCheckoutRequest is the body for POST /checkouts. Exactly one of
 // (CustomerID) or (CustomerEmail [+ CustomerName]) should be supplied —
-// the latter form auto-creates a Customer on the fly. For Mode=payment
-// pass InvoiceID; for Mode=subscription pass PriceID. Chain/Token are
-// optional pre-selections; if omitted, the buyer picks on the hosted
-// page.
+// the latter form auto-creates a Customer on the fly.
+//
+// For Mode=payment supply exactly ONE charge source: InvoiceID (an
+// existing invoice), PriceID (a one-time price), or Amount (an ad-hoc
+// minor-units charge). For Mode=subscription supply PriceID (a recurring
+// price). Chain/Token are optional pre-selections; if omitted, the buyer
+// picks on the hosted page.
 //
 // Hosted checkout is currently EVM-only (Base, Ethereum, Polygon,
 // Arbitrum). The Chain field's type accepts "solana" and "tron" — the
@@ -625,18 +675,86 @@ type Checkout struct {
 // networks. Pass an EVM ChainId here, or omit Chain and let the buyer
 // pick on the hosted page (only EVM options will appear).
 type CreateCheckoutRequest struct {
-	Mode             CheckoutMode `json:"mode"`
-	CustomerID       string       `json:"customerId,omitempty"`
-	CustomerEmail    string       `json:"customerEmail,omitempty"`
-	CustomerName     string       `json:"customerName,omitempty"`
-	InvoiceID        string       `json:"invoiceId,omitempty"`
-	PriceID          string       `json:"priceId,omitempty"`
-	SuccessURL       string       `json:"successUrl"`
-	CancelURL        string       `json:"cancelUrl,omitempty"`
-	Chain            ChainId      `json:"chain,omitempty"`
-	Token            TokenSymbol  `json:"token,omitempty"`
-	ExpiresInMinutes int          `json:"expiresInMinutes,omitempty"`
-	Metadata         Metadata     `json:"metadata,omitempty"`
+	Mode          CheckoutMode `json:"mode"`
+	CustomerID    string       `json:"customerId,omitempty"`
+	CustomerEmail string       `json:"customerEmail,omitempty"`
+	CustomerName  string       `json:"customerName,omitempty"`
+	InvoiceID     string       `json:"invoiceId,omitempty"`
+	PriceID       string       `json:"priceId,omitempty"`
+	// Amount is an ad-hoc one-time charge in MINOR units (cents) for
+	// Mode=payment only — an alternative to InvoiceID / a one-time PriceID
+	// for a variable or one-off price with no pre-made record. Must be a
+	// positive integer; the zero value is omitted from the request (so an
+	// unset Amount is never sent). Pair with Chain + Token (and optionally
+	// Currency / Description).
+	Amount int `json:"amount,omitempty"`
+	// Currency is the ISO-4217 currency code for an ad-hoc Amount. Optional;
+	// defaults to USD server-side.
+	Currency string `json:"currency,omitempty"`
+	// Description is an optional buyer-facing description for an ad-hoc
+	// Amount checkout.
+	Description      string      `json:"description,omitempty"`
+	SuccessURL       string      `json:"successUrl"`
+	CancelURL        string      `json:"cancelUrl,omitempty"`
+	Chain            ChainId     `json:"chain,omitempty"`
+	Token            TokenSymbol `json:"token,omitempty"`
+	ExpiresInMinutes int         `json:"expiresInMinutes,omitempty"`
+	Metadata         Metadata    `json:"metadata,omitempty"`
+}
+
+// --- Payment link -----------------------------------------------------
+
+// PaymentLink is a reusable, scan-and-pay hosted link. Unlike a Checkout
+// (a single-use buyer session), a payment link can be paid by many guests
+// over its lifetime. It carries either a fixed amount, a one-time Price,
+// or an open ("name your price") amount bounded by Min/Max/Preset.
+//
+// AmountMinor / MinAmountMinor / MaxAmountMinor / PresetAmounts are in
+// MINOR units of Currency (e.g. cents). URL is the absolute buyer-facing
+// page (e.g. "https://opensettle.io/pay/<token>") — use it directly.
+// OpenAmount=true means buyers type their own amount; AmountMinor is then
+// the resolved per-payment value the buyer entered (0 on the link record
+// itself). Active=false deactivates the link without deleting it.
+type PaymentLink struct {
+	ID             string      `json:"id"`
+	URL            string      `json:"url"`
+	Description    string      `json:"description"`
+	PriceID        *string     `json:"priceId"`
+	AmountMinor    int64       `json:"amountMinor"`
+	OpenAmount     bool        `json:"openAmount"`
+	MinAmountMinor *int64      `json:"minAmountMinor"`
+	MaxAmountMinor *int64      `json:"maxAmountMinor"`
+	PresetAmounts  []int64     `json:"presetAmounts"`
+	Currency       string      `json:"currency"`
+	Chain          ChainID     `json:"chain"`
+	Token          TokenSymbol `json:"token"`
+	SuccessURL     string      `json:"successUrl"`
+	Active         bool        `json:"active"`
+	CreatedAt      string      `json:"createdAt"`
+}
+
+// CreatePaymentLinkRequest is the body for POST /payment_links. Supply
+// exactly ONE amount source: Amount (a fixed charge in MINOR units),
+// PriceID (a one-time price), or OpenAmount=true (buyer names the price,
+// optionally bounded by MinAmount / MaxAmount / PresetAmounts — also in
+// MINOR units). Chain + Token pre-select the settlement rail; omit to let
+// the buyer choose on the hosted page (EVM-only on the hosted page today).
+//
+// All amount-bearing fields are pointers so the zero value can be sent
+// explicitly when meaningful and omitted otherwise.
+type CreatePaymentLinkRequest struct {
+	Amount        *int64         `json:"amount,omitempty"`
+	PriceID       *string        `json:"priceId,omitempty"`
+	OpenAmount    *bool          `json:"openAmount,omitempty"`
+	MinAmount     *int64         `json:"minAmount,omitempty"`
+	MaxAmount     *int64         `json:"maxAmount,omitempty"`
+	PresetAmounts []int64        `json:"presetAmounts,omitempty"`
+	Description   *string        `json:"description,omitempty"`
+	Currency      *string        `json:"currency,omitempty"`
+	Chain         ChainID        `json:"chain,omitempty"`
+	Token         TokenSymbol    `json:"token,omitempty"`
+	SuccessURL    *string        `json:"successUrl,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 // --- Webhook endpoint -------------------------------------------------
@@ -653,9 +771,12 @@ const (
 
 // WebhookEndpoint is a merchant-configured HTTPS destination for event
 // deliveries. SuccessRate is the server-computed rolling success ratio
-// over the recent delivery window. RotationGraceUntil is set during a
-// signing-secret rotation: until then, both the old and new secrets
-// produce valid signatures.
+// over the recent delivery window.
+//
+// RotationGraceUntil is reserved for a future dual-signing window but is
+// always nil today: there is currently NO grace window — rotating the
+// signing secret invalidates the previous secret immediately, so deploy
+// the new secret before (or atomically with) rotating.
 type WebhookEndpoint struct {
 	ID                 string                `json:"id"`
 	WorkspaceID        string                `json:"workspaceId"`
@@ -697,13 +818,6 @@ type UpdateWebhookEndpointRequest struct {
 	Status      *WebhookEndpointStatus `json:"status,omitempty"`
 }
 
-// RotateWebhookSecretRequest is the body for POST /webhook_endpoints/<id>/rotate.
-// GraceSeconds is the dual-signing window during which both old and new
-// secrets produce valid signatures; default is server-side when zero.
-type RotateWebhookSecretRequest struct {
-	GraceSeconds int `json:"graceSeconds,omitempty"`
-}
-
 // RotateWebhookSecretResponse is now an alias for
 // CreateWebhookEndpointResponse — the rotate endpoint returns the same
 // {endpoint, signingSecret} envelope as create.
@@ -712,21 +826,15 @@ type RotateWebhookSecretRequest struct {
 // will be removed in a future release.
 type RotateWebhookSecretResponse = CreateWebhookEndpointResponse
 
-// TestWebhookEndpointRequest is the body for POST /webhook_endpoints/<id>/test.
-// EventType is the event-type name to fire as a sample (e.g.
-// "payment.confirmed"); the payload is server-generated.
-type TestWebhookEndpointRequest struct {
-	EventType string `json:"eventType"`
-}
-
-// TestWebhookEndpointResponse reports the result of a synchronous test
-// delivery. Status is the HTTP status the endpoint returned to
-// OpenSettle; LatencyMs is the round-trip latency observed by the
-// dispatcher. OK is true when Status was 2xx.
+// TestWebhookEndpointResponse is the envelope returned by
+// POST /webhook_endpoints/<id>/test. The endpoint takes no request body —
+// the server emits a fresh sample event (a fixed sample type) and fans it
+// out to the endpoint asynchronously through the normal delivery + retry
+// pipeline. EventID is the ID of that emitted event; poll the events /
+// deliveries endpoints to observe the result. The call does NOT block on a
+// synchronous round-trip, so there is no inline HTTP status or latency.
 type TestWebhookEndpointResponse struct {
-	OK        bool `json:"ok"`
-	Status    int  `json:"status"`
-	LatencyMs int  `json:"latencyMs"`
+	EventID string `json:"eventId"`
 }
 
 // rawList wraps an envelope shape some endpoints use: { "data": [...] }
@@ -735,53 +843,3 @@ type TestWebhookEndpointResponse struct {
 type rawList[T any] struct {
 	Data []T `json:"data"`
 }
-
-// PaymentLink is a reusable, shareable payment link. Each visit to URL spawns a
-// fresh checkout. Back it with a fixed Amount, a saved PriceID, or an OpenAmount
-// the buyer names. AmountMinor is 0 when OpenAmount is true.
-type PaymentLink struct {
-	ID             string      `json:"id"`
-	URL            string      `json:"url"`
-	Description    string      `json:"description"`
-	PriceID        *string     `json:"priceId"`
-	AmountMinor    int64       `json:"amountMinor"`
-	OpenAmount     bool        `json:"openAmount"`
-	MinAmountMinor *int64      `json:"minAmountMinor"`
-	MaxAmountMinor *int64      `json:"maxAmountMinor"`
-	PresetAmounts  []int64     `json:"presetAmounts"`
-	Currency       string      `json:"currency"`
-	Chain          ChainID     `json:"chain"`
-	Token          TokenSymbol `json:"token"`
-	SuccessURL     string      `json:"successUrl"`
-	Active         bool        `json:"active"`
-	CreatedAt      string      `json:"createdAt"`
-}
-
-// CreatePaymentLinkRequest is the body for PaymentLinks.Create. Supply exactly
-// one amount source: Amount (fixed, minor units), PriceID, or OpenAmount=true
-// (with optional Min/Max/PresetAmounts). Description is required for a fixed
-// amount or open-amount link. Chain and Token are required.
-type CreatePaymentLinkRequest struct {
-	Amount        *int64         `json:"amount,omitempty"`
-	PriceID       *string        `json:"priceId,omitempty"`
-	OpenAmount    *bool          `json:"openAmount,omitempty"`
-	MinAmount     *int64         `json:"minAmount,omitempty"`
-	MaxAmount     *int64         `json:"maxAmount,omitempty"`
-	PresetAmounts []int64        `json:"presetAmounts,omitempty"`
-	Description   *string        `json:"description,omitempty"`
-	Currency      *string        `json:"currency,omitempty"`
-	Chain         ChainID        `json:"chain,omitempty"`
-	Token         TokenSymbol    `json:"token,omitempty"`
-	SuccessURL    *string        `json:"successUrl,omitempty"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
-}
-
-// ScreeningVerdict is the sanctions-screening result for a payment.
-type ScreeningVerdict string
-
-const (
-	ScreeningNotScreened ScreeningVerdict = "not_screened"
-	ScreeningClean       ScreeningVerdict = "screened_clean"
-	ScreeningFlagged     ScreeningVerdict = "screened_flagged"
-	ScreeningError       ScreeningVerdict = "screen_error"
-)

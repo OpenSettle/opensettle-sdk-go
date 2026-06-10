@@ -87,6 +87,62 @@ func TestCheckouts_Create_BodySerialization(t *testing.T) {
 	}
 }
 
+func TestCheckouts_Create_AdHocAmountSerialization(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, checkoutWrappedJSON)
+	_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{
+		Mode:        CheckoutPayment,
+		CustomerID:  "cu_1",
+		Amount:      4200,
+		Currency:    "EUR",
+		Description: "Custom one-time charge",
+		Chain:       ChainBase,
+		Token:       TokenUSDC,
+		SuccessURL:  "https://example/ok",
+	})
+	body := decodeBody[map[string]any](t, s.lastRequest(t).Body)
+	// JSON numbers decode to float64.
+	if got, ok := body["amount"].(float64); !ok || got != 4200 {
+		t.Fatalf("amount: %v (ok=%v)", body["amount"], ok)
+	}
+	if body["currency"] != "EUR" {
+		t.Fatalf("currency: %v", body["currency"])
+	}
+	if body["description"] != "Custom one-time charge" {
+		t.Fatalf("description: %v", body["description"])
+	}
+	// Only one charge source should be on the wire.
+	if _, ok := body["invoiceId"]; ok {
+		t.Fatalf("invoiceId should be omitempty")
+	}
+	if _, ok := body["priceId"]; ok {
+		t.Fatalf("priceId should be omitempty")
+	}
+}
+
+func TestCheckouts_Create_OmitsAdHocFieldsWhenUnset(t *testing.T) {
+	s := newStubServer()
+	defer s.Close()
+	c := newTestClient(t, s)
+	s.queue(200, checkoutWrappedJSON)
+	// Invoice-based checkout: none of the ad-hoc fields are set, so none
+	// of them should be serialized (amount==0 is the omitted zero value).
+	_, _ = c.Checkouts.Create(bgCtx(), CreateCheckoutRequest{
+		Mode:       CheckoutPayment,
+		CustomerID: "cu_1",
+		InvoiceID:  "in_1",
+		SuccessURL: "https://example/ok",
+	})
+	body := decodeBody[map[string]any](t, s.lastRequest(t).Body)
+	for _, k := range []string{"amount", "currency", "description"} {
+		if _, ok := body[k]; ok {
+			t.Fatalf("%s should be omitempty when unset", k)
+		}
+	}
+}
+
 func TestCheckouts_Retrieve_HappyPath(t *testing.T) {
 	s := newStubServer()
 	defer s.Close()
