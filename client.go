@@ -73,6 +73,7 @@ type Client struct {
 	Checkouts        *CheckoutsResource
 	Customers        *CustomersResource
 	Invoices         *InvoicesResource
+	PaymentLinks     *PaymentLinksResource
 	Payments         *PaymentsResource
 	Products         *ProductsResource
 	Subscriptions    *SubscriptionsResource
@@ -128,6 +129,7 @@ func NewClient(apiKey, workspaceID string, opts ...Option) (*Client, error) {
 	c.Checkouts = &CheckoutsResource{http: hc}
 	c.Customers = &CustomersResource{http: hc}
 	c.Invoices = &InvoicesResource{http: hc}
+	c.PaymentLinks = &PaymentLinksResource{http: hc}
 	c.Payments = &PaymentsResource{http: hc}
 	c.Products = &ProductsResource{http: hc}
 	c.Subscriptions = &SubscriptionsResource{http: hc}

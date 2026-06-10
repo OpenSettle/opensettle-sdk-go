@@ -77,6 +77,7 @@ The SDK mirrors the OpenSettle REST API one-to-one:
 | `client.Checkouts`        | `/v1/workspaces/<ws>/checkouts`           |
 | `client.Customers`        | `/v1/workspaces/<ws>/customers`           |
 | `client.Invoices`         | `/v1/workspaces/<ws>/invoices`            |
+| `client.PaymentLinks`     | `/v1/workspaces/<ws>/payment_links`       |
 | `client.Payments`         | `/v1/workspaces/<ws>/payments`            |
 | `client.Products`         | `/v1/workspaces/<ws>/products` (+ prices) |
 | `client.Subscriptions`    | `/v1/workspaces/<ws>/subscriptions`       |

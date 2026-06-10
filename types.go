@@ -289,6 +289,7 @@ type Payment struct {
 	CustomerID        *string       `json:"customerId"`
 	SubscriptionID    *string       `json:"subscriptionId"`
 	InvoiceID         *string       `json:"invoiceId"`
+	CheckoutID        *string       `json:"checkoutId"`
 	WalletID          *string       `json:"walletId"`
 	AmountMinor       int           `json:"amountMinor"`
 	FeeMinor          int           `json:"feeMinor"`
@@ -304,11 +305,47 @@ type Payment struct {
 	Confirmations     int           `json:"confirmations"`
 	RefundTxHash      *string       `json:"refundTxHash"`
 	RefundAmountMinor *int          `json:"refundAmountMinor"`
+	RefundRecipient   *string       `json:"refundRecipient"`
 	RefundBroadcastAt *string       `json:"refundBroadcastAt"`
 	RefundedAt        *string       `json:"refundedAt"`
 	RefundReason      *string       `json:"refundReason"`
-	CreatedAt         string        `json:"createdAt"`
-	ConfirmedAt       *string       `json:"confirmedAt"`
+	// ScreeningVerdict is the server-populated sanctions-screening result.
+	// Default with the no-op provider is ScreeningNotScreened on every row;
+	// switch on it to surface ScreeningFlagged / ScreeningError without an
+	// extra request.
+	ScreeningVerdict ScreeningVerdict `json:"screeningVerdict"`
+	// ScreeningProvider is the screening provider of record, or nil. Today
+	// this is the in-house no-op provider, so it is nil on every row.
+	ScreeningProvider *string `json:"screeningProvider"`
+	// ScreeningScreenedAt is the screening timestamp; nil when
+	// ScreeningVerdict is ScreeningNotScreened.
+	ScreeningScreenedAt *string `json:"screeningScreenedAt"`
+	// TokenAmountBase is the settled on-chain token amount in the token's
+	// smallest base unit (e.g. 6-decimal USDC), as a decimal string to avoid
+	// float precision loss. Nil until the payment is matched on chain.
+	TokenAmountBase *string `json:"tokenAmountBase"`
+	// UnmatchedInbound is true for an inbound transfer the chain reader saw
+	// but could not bind to an expected checkout/invoice (e.g. wrong amount
+	// or unsolicited deposit). Such rows sit in an ops triage surface.
+	UnmatchedInbound bool `json:"unmatchedInbound"`
+	// CloseMatchCheckoutID is the checkout this inbound transfer is a
+	// near-miss for (amount within the close-match band but not exact), or
+	// nil. Used to reconcile under/overpayments.
+	CloseMatchCheckoutID *string `json:"closeMatchCheckoutId"`
+	// ExpectedTokenAmountBase is the token base-unit amount the checkout
+	// quoted, set on close-match / unmatched rows so ops can see the delta
+	// against ReceivedTokenAmountBase. Nil otherwise.
+	ExpectedTokenAmountBase *string `json:"expectedTokenAmountBase"`
+	// ReceivedTokenAmountBase is the token base-unit amount actually
+	// received, set alongside ExpectedTokenAmountBase on close-match /
+	// unmatched rows. Nil otherwise.
+	ReceivedTokenAmountBase *string `json:"receivedTokenAmountBase"`
+	// ReorgSuspected is true when the chain reader has flagged this payment
+	// as possibly affected by a chain reorganization and is re-checking it.
+	// It is advisory; a confirmed reorg flips Status to PaymentReorged.
+	ReorgSuspected bool    `json:"reorgSuspected"`
+	ConfirmedAt    *string `json:"confirmedAt"`
+	CreatedAt      string  `json:"createdAt"`
 }
 
 // InitiateRefundRequest is the body for POST /payments/<id>/refund.
@@ -698,3 +735,53 @@ type TestWebhookEndpointResponse struct {
 type rawList[T any] struct {
 	Data []T `json:"data"`
 }
+
+// PaymentLink is a reusable, shareable payment link. Each visit to URL spawns a
+// fresh checkout. Back it with a fixed Amount, a saved PriceID, or an OpenAmount
+// the buyer names. AmountMinor is 0 when OpenAmount is true.
+type PaymentLink struct {
+	ID             string      `json:"id"`
+	URL            string      `json:"url"`
+	Description    string      `json:"description"`
+	PriceID        *string     `json:"priceId"`
+	AmountMinor    int64       `json:"amountMinor"`
+	OpenAmount     bool        `json:"openAmount"`
+	MinAmountMinor *int64      `json:"minAmountMinor"`
+	MaxAmountMinor *int64      `json:"maxAmountMinor"`
+	PresetAmounts  []int64     `json:"presetAmounts"`
+	Currency       string      `json:"currency"`
+	Chain          ChainID     `json:"chain"`
+	Token          TokenSymbol `json:"token"`
+	SuccessURL     string      `json:"successUrl"`
+	Active         bool        `json:"active"`
+	CreatedAt      string      `json:"createdAt"`
+}
+
+// CreatePaymentLinkRequest is the body for PaymentLinks.Create. Supply exactly
+// one amount source: Amount (fixed, minor units), PriceID, or OpenAmount=true
+// (with optional Min/Max/PresetAmounts). Description is required for a fixed
+// amount or open-amount link. Chain and Token are required.
+type CreatePaymentLinkRequest struct {
+	Amount        *int64         `json:"amount,omitempty"`
+	PriceID       *string        `json:"priceId,omitempty"`
+	OpenAmount    *bool          `json:"openAmount,omitempty"`
+	MinAmount     *int64         `json:"minAmount,omitempty"`
+	MaxAmount     *int64         `json:"maxAmount,omitempty"`
+	PresetAmounts []int64        `json:"presetAmounts,omitempty"`
+	Description   *string        `json:"description,omitempty"`
+	Currency      *string        `json:"currency,omitempty"`
+	Chain         ChainID        `json:"chain,omitempty"`
+	Token         TokenSymbol    `json:"token,omitempty"`
+	SuccessURL    *string        `json:"successUrl,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+// ScreeningVerdict is the sanctions-screening result for a payment.
+type ScreeningVerdict string
+
+const (
+	ScreeningNotScreened ScreeningVerdict = "not_screened"
+	ScreeningClean       ScreeningVerdict = "screened_clean"
+	ScreeningFlagged     ScreeningVerdict = "screened_flagged"
+	ScreeningError       ScreeningVerdict = "screen_error"
+)
