@@ -190,6 +190,16 @@ type CreatePriceRequest struct {
 	Metadata Metadata      `json:"metadata,omitempty"`
 }
 
+// UpdatePriceRequest is the body for PATCH /prices/<id>. Only `active`
+// (a tri-state pointer: nil = unchanged, &true / &false to toggle) and
+// `metadata` are mutable — amount, currency, and interval are immutable
+// once a price exists (create a new price instead). Mirrors the server's
+// UpdatePriceRequest schema.
+type UpdatePriceRequest struct {
+	Active   *bool    `json:"active,omitempty"`
+	Metadata Metadata `json:"metadata,omitempty"`
+}
+
 // ListProductsQuery filters GET /products. Active is a tri-state pointer:
 // nil = both active and inactive, &true = active only, &false = inactive
 // only.
@@ -507,18 +517,35 @@ const (
 // recurring revenue contribution. CurrentPeriodEnd and NextBillingDate
 // are server-managed.
 //
+// AutopayFailure explains WHY a past_due allowance-autopay subscription
+// last failed to auto-charge, so a merchant can tell a revoked / exhausted
+// allowance (the customer must act; retries won't recover) from a transient
+// miss (auto-retrying). Only populated on a single Retrieve when the
+// subscription is past_due AND autopay is allowance-mode; nil otherwise.
+type AutopayFailure struct {
+	Reason string `json:"reason"`
+	// At is the ISO-8601 timestamp of the failed renewal attempt; null when
+	// the underlying payment row has no recorded update time.
+	At *string `json:"at"`
+}
+
 // Autopay is currently always manual: the customer pays each renewal
 // on-chain by signing in their wallet (OpenSettle never pulls funds).
 // AllowanceTx/AllowanceRemaining are reserved for the roadmap allowance
 // mode and are normally nil today.
 type Subscription struct {
-	ID                 string             `json:"id"`
-	WorkspaceID        string             `json:"workspaceId"`
-	CustomerID         string             `json:"customerId"`
-	ProductID          string             `json:"productId"`
-	PriceID            string             `json:"priceId"`
-	AmountMinor        int                `json:"amountMinor"`
-	Currency           string             `json:"currency"`
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspaceId"`
+	CustomerID  string `json:"customerId"`
+	ProductID   string `json:"productId"`
+	PriceID     string `json:"priceId"`
+	AmountMinor int    `json:"amountMinor"`
+	Currency    string `json:"currency"`
+	// Interval is the recurring billing cadence in the dashboard's vocabulary
+	// (e.g. "monthly", "weekly", "yearly"). It lives on the price, so the API
+	// only side-loads it on list + single-get responses — omitempty because a
+	// raw subscription record (e.g. from a webhook payload) may omit it.
+	Interval           string             `json:"interval,omitempty"`
 	Chain              ChainId            `json:"chain"`
 	Token              TokenSymbol        `json:"token"`
 	Status             SubscriptionStatus `json:"status"`
@@ -535,6 +562,9 @@ type Subscription struct {
 	MRRMinor           int                `json:"mrrMinor"`
 	Metadata           Metadata           `json:"metadata"`
 	CreatedAt          string             `json:"createdAt"`
+	// LastAutopayFailure is set only on a single Retrieve of a past_due
+	// allowance-autopay subscription (see AutopayFailure); nil otherwise.
+	LastAutopayFailure *AutopayFailure `json:"lastAutopayFailure,omitempty"`
 }
 
 // CreateSubscriptionRequest is the body for POST /subscriptions. Autopay
@@ -636,20 +666,23 @@ type Checkout struct {
 	WorkspaceID string         `json:"workspaceId"`
 	Mode        CheckoutMode   `json:"mode"`
 	Status      CheckoutStatus `json:"status"`
-	CustomerID  string         `json:"customerId"`
-	InvoiceID   *string        `json:"invoiceId"`
-	PriceID     *string        `json:"priceId"`
-	AmountMinor int            `json:"amountMinor"`
-	Currency    string         `json:"currency"`
-	Chain       ChainId        `json:"chain"`
-	Token       TokenSymbol    `json:"token"`
-	Description *string        `json:"description"`
-	SuccessURL  string         `json:"successUrl"`
-	CancelURL   *string        `json:"cancelUrl"`
-	ExpiresAt   string         `json:"expiresAt"`
-	CompletedAt *string        `json:"completedAt"`
-	Metadata    Metadata       `json:"metadata"`
-	CreatedAt   string         `json:"createdAt"`
+	// CustomerID is null for a GUEST checkout (a scan-and-pay link with no
+	// customer attached), so it is a pointer — a guest session decodes it
+	// as nil rather than failing.
+	CustomerID  *string     `json:"customerId"`
+	InvoiceID   *string     `json:"invoiceId"`
+	PriceID     *string     `json:"priceId"`
+	AmountMinor int         `json:"amountMinor"`
+	Currency    string      `json:"currency"`
+	Chain       ChainId     `json:"chain"`
+	Token       TokenSymbol `json:"token"`
+	Description *string     `json:"description"`
+	SuccessURL  string      `json:"successUrl"`
+	CancelURL   *string     `json:"cancelUrl"`
+	ExpiresAt   string      `json:"expiresAt"`
+	CompletedAt *string     `json:"completedAt"`
+	Metadata    Metadata    `json:"metadata"`
+	CreatedAt   string      `json:"createdAt"`
 	// HostedURL is the absolute buyer-facing redirect URL
 	// (e.g. "https://opensettle.io/checkout/<hostedToken>"). Redirect to it
 	// directly. Uses an unguessable hosted-token, not the timestamp-prefixed
@@ -693,8 +726,13 @@ type CreateCheckoutRequest struct {
 	Currency string `json:"currency,omitempty"`
 	// Description is an optional buyer-facing description for an ad-hoc
 	// Amount checkout.
-	Description      string      `json:"description,omitempty"`
-	SuccessURL       string      `json:"successUrl"`
+	Description string `json:"description,omitempty"`
+	// SuccessURL is where the buyer is sent after a successful payment.
+	// OPTIONAL — omit it for a shareable link with no return destination.
+	// Must be omitempty: the server's SafeRedirectUrl validator accepts
+	// only a valid http(s) URL or absence; an empty "" would be rejected
+	// with a 400, so an unset SuccessURL must not be serialized at all.
+	SuccessURL       string      `json:"successUrl,omitempty"`
 	CancelURL        string      `json:"cancelUrl,omitempty"`
 	Chain            ChainId     `json:"chain,omitempty"`
 	Token            TokenSymbol `json:"token,omitempty"`

@@ -120,6 +120,30 @@ func (r *ProductsResource) CreatePrice(ctx context.Context, productID string, in
 	return wrapper.Price, nil
 }
 
+// UpdatePrice patches a price (PATCH /prices/<id>). Only Active and
+// Metadata are mutable — amount, currency, and interval are immutable
+// once a price exists. Fields left nil on input are unchanged.
+//
+// Unlike CreatePrice, this endpoint does not require an Idempotency-Key
+// (a PATCH of a single named price is naturally idempotent), so no key is
+// attached by default; pass [WithIdempotencyKey] if you want to supply one.
+func (r *ProductsResource) UpdatePrice(ctx context.Context, priceID string, input UpdatePriceRequest, opts ...RequestOption) (*Price, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
+		method: http.MethodPatch,
+		body:   input,
+	}
+	cfg.applyTo(&reqOpts)
+	var wrapper struct {
+		Price *Price `json:"price"`
+	}
+	err := r.http.request(ctx, "/prices/"+url.PathEscape(priceID), reqOpts, &wrapper)
+	if err != nil {
+		return nil, err
+	}
+	return wrapper.Price, nil
+}
+
 // DeletePrice hard-deletes a price. Returns *ConflictError (409) if any
 // subscription still references it.
 func (r *ProductsResource) DeletePrice(ctx context.Context, priceID string) error {

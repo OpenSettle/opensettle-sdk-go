@@ -71,12 +71,17 @@ func (r *SubscriptionsResource) Create(ctx context.Context, input CreateSubscrip
 
 // Pause stops billing on a subscription without canceling it. Resume to
 // continue. No proration; the next billing date shifts forward by the
-// paused interval.
-func (r *SubscriptionsResource) Pause(ctx context.Context, subID string) (*Subscription, error) {
+// paused interval. Auto-attaches an Idempotency-Key (the endpoint requires
+// one); supply [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *SubscriptionsResource) Pause(ctx context.Context, subID string, opts ...RequestOption) (*Subscription, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
+		method:      http.MethodPost,
+		idempotency: idempotency{mode: idempotencyAuto},
+	}
+	cfg.applyTo(&reqOpts)
 	var w subscriptionWrapper
-	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/pause", requestOptions{
-		method: http.MethodPost,
-	}, &w)
+	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/pause", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +90,17 @@ func (r *SubscriptionsResource) Pause(ctx context.Context, subID string) (*Subsc
 
 // Resume reactivates a paused subscription. Billing restarts from the
 // shifted next-billing date set when the subscription was paused.
-func (r *SubscriptionsResource) Resume(ctx context.Context, subID string) (*Subscription, error) {
+// Auto-attaches an Idempotency-Key (the endpoint requires one); supply
+// [WithIdempotencyKey] to use a caller-chosen key instead.
+func (r *SubscriptionsResource) Resume(ctx context.Context, subID string, opts ...RequestOption) (*Subscription, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
+		method:      http.MethodPost,
+		idempotency: idempotency{mode: idempotencyAuto},
+	}
+	cfg.applyTo(&reqOpts)
 	var w subscriptionWrapper
-	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/resume", requestOptions{
-		method: http.MethodPost,
-	}, &w)
+	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/resume", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
@@ -98,13 +109,19 @@ func (r *SubscriptionsResource) Resume(ctx context.Context, subID string) (*Subs
 
 // Cancel ends a subscription. Mode controls timing (immediately vs
 // at_period_end). Default is at_period_end when input.Mode is empty.
-// Reason is recorded on the audit log.
-func (r *SubscriptionsResource) Cancel(ctx context.Context, subID string, input CancelSubscriptionRequest) (*Subscription, error) {
+// Reason is recorded on the audit log. Auto-attaches an Idempotency-Key
+// (the endpoint requires one); supply [WithIdempotencyKey] to use a
+// caller-chosen key instead.
+func (r *SubscriptionsResource) Cancel(ctx context.Context, subID string, input CancelSubscriptionRequest, opts ...RequestOption) (*Subscription, error) {
+	cfg := newRequestConfig(opts)
+	reqOpts := requestOptions{
+		method:      http.MethodPost,
+		body:        input,
+		idempotency: idempotency{mode: idempotencyAuto},
+	}
+	cfg.applyTo(&reqOpts)
 	var w subscriptionWrapper
-	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/cancel", requestOptions{
-		method: http.MethodPost,
-		body:   input,
-	}, &w)
+	err := r.http.request(ctx, "/subscriptions/"+url.PathEscape(subID)+"/cancel", reqOpts, &w)
 	if err != nil {
 		return nil, err
 	}
