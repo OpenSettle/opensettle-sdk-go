@@ -72,6 +72,7 @@ The SDK mirrors the OpenSettle REST API one-to-one:
 | `client.Customers`        | `/v1/workspaces/<ws>/customers`           |
 | `client.Invoices`         | `/v1/workspaces/<ws>/invoices`            |
 | `client.Payments`         | `/v1/workspaces/<ws>/payments`            |
+| `client.PaymentLinks`     | `/v1/workspaces/<ws>/payment_links`       |
 | `client.Products`         | `/v1/workspaces/<ws>/products` (+ prices) |
 | `client.Subscriptions`    | `/v1/workspaces/<ws>/subscriptions`       |
 | `client.WebhookEndpoints` | `/v1/workspaces/<ws>/webhook_endpoints`   |
@@ -189,10 +190,17 @@ func handle(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-`webhooks.Decode[T]` is the generic version when you want a typed event:
+`webhooks.Decode[T]` is the generic version when you want a typed event. Define
+a struct matching the payload fields you care about (the SDK ships event-type
+constants, not per-event payload structs, so you model just what you need):
 
 ```go
-ev, _, err := webhooks.Decode[PaymentConfirmedEvent](opts)
+type PaymentConfirmed struct {
+    PaymentID   string `json:"paymentId"`
+    AmountMinor int64  `json:"amountMinor"`
+}
+
+ev, _, err := webhooks.Decode[PaymentConfirmed](opts)
 ```
 
 Signature scheme: header is `x-opensettle-signature: t=<unix_seconds>,v1=<hex>` where `v1` is HMAC-SHA256 of `<unix_seconds>.<raw_body>` with the per-endpoint signing secret. Constant-time comparison via `hmac.Equal`. Default tolerance window is 5 minutes; tune via `Opts.Tolerance`.

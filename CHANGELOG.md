@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Major versions track the HTTP API major version (`v1`).
 
-## [Unreleased]
+## [0.5.1] - 2026-06-28
 
 Brings the SDK to parity with the published `@opensettle/sdk` / `opensettle`
 `0.5.1` release. All changes are additive and backward-compatible.

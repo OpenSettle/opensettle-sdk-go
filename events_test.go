@@ -10,6 +10,10 @@ func TestWebhookEventConstants(t *testing.T) {
 		EventCheckoutCreated:           "checkout.created",
 		EventCheckoutExpired:           "checkout.expired",
 		EventCheckoutSucceeded:         "checkout.succeeded",
+		EventCommissionAccrued:         "commission.accrued",
+		EventCommissionAdjusted:        "commission.adjusted",
+		EventCommissionPaid:            "commission.paid",
+		EventCommissionVoided:          "commission.voided",
 		EventCustomerCreated:           "customer.created",
 		EventCustomerDeleted:           "customer.deleted",
 		EventCustomerUpdated:           "customer.updated",
@@ -61,13 +65,15 @@ func TestWebhookEventConstants(t *testing.T) {
 // outside the known set. (webhook.endpoint.created / webhook.endpoint.test
 // ARE real events the backend emits via emitEvent.)
 func TestAllWebhookEvents(t *testing.T) {
-	const want = 41
+	const want = 45
 	if len(AllWebhookEvents) != want {
 		t.Fatalf("AllWebhookEvents has %d entries, want %d", len(AllWebhookEvents), want)
 	}
 	known := map[WebhookEventType]bool{
 		EventAllowanceDepleted: true, EventCheckoutCreated: true, EventCheckoutExpired: true,
-		EventCheckoutSucceeded: true, EventCustomerCreated: true, EventCustomerDeleted: true,
+		EventCheckoutSucceeded: true, EventCommissionAccrued: true, EventCommissionAdjusted: true,
+		EventCommissionPaid: true, EventCommissionVoided: true,
+		EventCustomerCreated: true, EventCustomerDeleted: true,
 		EventCustomerUpdated: true, EventInvoiceCreated: true, EventInvoicePaid: true,
 		EventInvoicePastDue: true, EventInvoiceReminderSent: true, EventInvoiceSent: true,
 		EventInvoiceVoided: true, EventPaymentConfirmed: true, EventPaymentFailed: true,

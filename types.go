@@ -366,6 +366,24 @@ type Payment struct {
 	// smallest base unit (e.g. 6-decimal USDC), as a decimal string to avoid
 	// float precision loss. Nil until the payment is matched on chain.
 	TokenAmountBase *string `json:"tokenAmountBase"`
+	// TokenDecimals is the canonical on-chain decimals for this (chain, token),
+	// from OpenSettle's frozen token registry. Interpret TokenAmountBase with
+	// this — human amount = tokenAmountBase / 10^tokenDecimals; cents =
+	// tokenAmountBase / 10^(tokenDecimals - 2). Read it instead of hardcoding 6:
+	// a hardcoded 6 silently accepts a ~1e12x underpayment the day a token
+	// settles at 18 decimals.
+	TokenDecimals int `json:"tokenDecimals"`
+	// SettledUsdMinor is the on-chain settled value scaled to USD cents
+	// (= tokenAmountBase / 10^(tokenDecimals - 2)). A convenience signal so you
+	// never re-implement the base-unit scaling; exact for the 1:1 USD-pegged
+	// stablecoins today. Nil until an on-chain amount is recorded.
+	SettledUsdMinor *int `json:"settledUsdMinor"`
+	// FullySettled is true when the received on-chain amount met or exceeded what
+	// the payment was expected to settle. A normal exact match is true; a
+	// close-match row is true only when received >= expected. Gate access on THIS
+	// rather than trusting Status == PaymentConfirmed alone — a dust-band
+	// underpayment can auto-credit yet not be fully settled.
+	FullySettled bool `json:"fullySettled"`
 	// UnmatchedInbound is true for an inbound transfer the chain reader saw
 	// but could not bind to an expected checkout/invoice (e.g. wrong amount
 	// or unsolicited deposit). Such rows sit in an ops triage surface.
@@ -487,25 +505,30 @@ const (
 	SubCanceled SubscriptionStatus = "canceled"
 )
 
-// AutopayMode names how a subscription's renewal charge is intended to be
-// collected. Today only manual is operative: every recurring invoice is
-// paid on-chain by the customer signing each renewal in their own wallet.
-// OpenSettle is non-custodial and never pulls funds.
+// AutopayMode names how a subscription's renewal charge is collected.
 //
-// allowance and smart-wallet are roadmap modes and NOT yet active —
-// allowance would use an ERC-20 spend approval against the merchant's
-// collector, and smart-wallet a session-key-style preauthorization, but
-// neither is wired up. They are kept as constants for forward-compat;
-// selecting them today does not enable automatic pulls.
+// manual: the customer pays each recurring invoice on-chain by signing the
+// renewal in their own wallet; OpenSettle initiates no transfer.
+//
+// allowance: card-on-file, and the GA autopay mode. The customer signs a
+// one-time capped ERC-20 spend authorization at checkout; OpenSettle's
+// relayer then pulls each renewal via transferFrom, customer→merchant.
+// OpenSettle stays non-custodial — the funds never touch it, and the
+// per-pull cap, interval, and expiry are enforced by the on-chain puller.
+// EVM chains only (Solana/Tron stay manual).
+//
+// smart-wallet: roadmap (a session-key-style preauthorization) and NOT yet
+// implemented — selecting it is rejected today.
 type AutopayMode string
 
 const (
-	// AutopayAllowance is a roadmap mode and NOT yet active. Reserved for a
-	// future ERC-20 spend-approval flow; today it does not pull funds.
+	// AutopayAllowance is the GA card-on-file mode (EVM only): the customer
+	// signs a capped ERC-20 spend authorization once and OpenSettle's relayer
+	// pulls each renewal via transferFrom (customer→merchant, non-custodial).
 	AutopayAllowance AutopayMode = "allowance"
-	// AutopaySmartWallet is a roadmap mode and NOT yet active. Reserved for
-	// a future session-key-style preauthorization flow; today it does not
-	// pull funds.
+	// AutopaySmartWallet is a roadmap mode and NOT yet implemented. Reserved
+	// for a future session-key-style preauthorization flow; selecting it is
+	// rejected today.
 	AutopaySmartWallet AutopayMode = "smart-wallet"
 	// AutopayManual is the only operative mode: the customer pays each
 	// recurring invoice on-chain by signing the renewal in their wallet.
@@ -529,10 +552,11 @@ type AutopayFailure struct {
 	At *string `json:"at"`
 }
 
-// Autopay is currently always manual: the customer pays each renewal
-// on-chain by signing in their wallet (OpenSettle never pulls funds).
-// AllowanceTx/AllowanceRemaining are reserved for the roadmap allowance
-// mode and are normally nil today.
+// Autopay is manual (the customer signs each renewal on-chain) or allowance
+// (card-on-file: OpenSettle's relayer pulls each renewal from a
+// customer-signed, capped ERC-20 allowance — customer→merchant,
+// non-custodial). AllowanceTx/AllowanceRemaining carry the approval tx and
+// remaining cap when Autopay == allowance; nil for manual.
 type Subscription struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspaceId"`
@@ -568,11 +592,12 @@ type Subscription struct {
 }
 
 // CreateSubscriptionRequest is the body for POST /subscriptions. Autopay
-// defaults to manual when empty, and manual is currently the only
-// operative mode — the customer pays each renewal on-chain by signing in
-// their wallet (allowance/smart-wallet are roadmap and not yet active;
-// OpenSettle never pulls funds). TrialDays > 0 starts the subscription
-// in trialing status; the first charge fires at trial end.
+// defaults to manual when empty. manual = the customer signs each renewal
+// on-chain; allowance = card-on-file (a customer-signed capped ERC-20
+// allowance that OpenSettle's relayer pulls each renewal, non-custodially,
+// EVM only). smart-wallet is roadmap and not yet implemented. TrialDays > 0
+// starts the subscription in trialing status; the first charge fires at
+// trial end.
 type CreateSubscriptionRequest struct {
 	CustomerID string      `json:"customerId"`
 	PriceID    string      `json:"priceId"`
@@ -669,20 +694,31 @@ type Checkout struct {
 	// CustomerID is null for a GUEST checkout (a scan-and-pay link with no
 	// customer attached), so it is a pointer — a guest session decodes it
 	// as nil rather than failing.
-	CustomerID  *string     `json:"customerId"`
-	InvoiceID   *string     `json:"invoiceId"`
-	PriceID     *string     `json:"priceId"`
-	AmountMinor int         `json:"amountMinor"`
-	Currency    string      `json:"currency"`
-	Chain       ChainId     `json:"chain"`
-	Token       TokenSymbol `json:"token"`
-	Description *string     `json:"description"`
-	SuccessURL  string      `json:"successUrl"`
-	CancelURL   *string     `json:"cancelUrl"`
-	ExpiresAt   string      `json:"expiresAt"`
-	CompletedAt *string     `json:"completedAt"`
-	Metadata    Metadata    `json:"metadata"`
-	CreatedAt   string      `json:"createdAt"`
+	CustomerID *string `json:"customerId"`
+	InvoiceID  *string `json:"invoiceId"`
+	PriceID    *string `json:"priceId"`
+	// AmountMinor is the actual charged amount in minor units (e.g. cents). When
+	// a coupon is applied this is the DISCOUNTED charge, NOT the list price —
+	// reconcile against OriginalAmountMinor / CouponDiscountMinor.
+	AmountMinor int `json:"amountMinor"`
+	// CouponCode is the applied coupon code, or nil.
+	CouponCode *string `json:"couponCode"`
+	// CouponDiscountMinor is the discount the coupon took off the list price, in
+	// minor units (e.g. cents), or nil.
+	CouponDiscountMinor *int `json:"couponDiscountMinor"`
+	// OriginalAmountMinor is the list price before any coupon (= AmountMinor +
+	// CouponDiscountMinor). Equals AmountMinor when no coupon was applied.
+	OriginalAmountMinor int         `json:"originalAmountMinor"`
+	Currency            string      `json:"currency"`
+	Chain               ChainId     `json:"chain"`
+	Token               TokenSymbol `json:"token"`
+	Description         *string     `json:"description"`
+	SuccessURL          string      `json:"successUrl"`
+	CancelURL           *string     `json:"cancelUrl"`
+	ExpiresAt           string      `json:"expiresAt"`
+	CompletedAt         *string     `json:"completedAt"`
+	Metadata            Metadata    `json:"metadata"`
+	CreatedAt           string      `json:"createdAt"`
 	// HostedURL is the absolute buyer-facing redirect URL
 	// (e.g. "https://opensettle.io/checkout/<hostedToken>"). Redirect to it
 	// directly. Uses an unguessable hosted-token, not the timestamp-prefixed

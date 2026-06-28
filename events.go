@@ -18,6 +18,11 @@ const (
 	EventCheckoutExpired   WebhookEventType = "checkout.expired"
 	EventCheckoutSucceeded WebhookEventType = "checkout.succeeded"
 
+	EventCommissionAccrued  WebhookEventType = "commission.accrued"
+	EventCommissionAdjusted WebhookEventType = "commission.adjusted"
+	EventCommissionPaid     WebhookEventType = "commission.paid"
+	EventCommissionVoided   WebhookEventType = "commission.voided"
+
 	EventCustomerCreated WebhookEventType = "customer.created"
 	EventCustomerDeleted WebhookEventType = "customer.deleted"
 	EventCustomerUpdated WebhookEventType = "customer.updated"
@@ -76,6 +81,10 @@ var AllWebhookEvents = []WebhookEventType{
 	EventCheckoutCreated,
 	EventCheckoutExpired,
 	EventCheckoutSucceeded,
+	EventCommissionAccrued,
+	EventCommissionAdjusted,
+	EventCommissionPaid,
+	EventCommissionVoided,
 	EventCustomerCreated,
 	EventCustomerDeleted,
 	EventCustomerUpdated,
