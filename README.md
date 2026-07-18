@@ -40,8 +40,10 @@ func main() {
     ctx := context.Background()
     checkout, err := client.Checkouts.Create(ctx, opensettle.CreateCheckoutRequest{
         Mode:       opensettle.CheckoutPayment,
-        CustomerID: "cu_1",
-        InvoiceID:  "in_1",
+        Amount:     4999, // minor units — $49.99 (no customer or invoice needed)
+        Currency:   "USD", // optional — defaults to USD
+        Chain:      opensettle.ChainBase,
+        Token:      opensettle.TokenUSDC,
         SuccessURL: "https://example.com/thanks",
     })
     if err != nil {
